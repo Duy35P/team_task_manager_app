@@ -27,7 +27,7 @@ const kAvatarColors = [
 
 // ── Reusable widgets ──────────────────────────────────────────────────────────
 
-/// Small coloured badge (status / priority / tag)
+/// Small coloured badge (status)
 class AppBadge extends StatelessWidget {
   final String label;
   final Color bg;
@@ -82,17 +82,11 @@ class AppCard extends StatelessWidget {
       );
 }
 
-// ── Status / priority helpers ─────────────────────────────────────────────────
+// ── Status helpers ────────────────────────────────────────────────────────────
 ({Color bg, Color fg, String label}) statusStyle(String s) => switch (s) {
       'done'  => (bg: kTealLight,  fg: kTeal,  label: 'Hoàn thành'),
       'doing' => (bg: kAmberLight, fg: kAmber, label: 'Đang làm'),
       _       => (bg: kAccentLight, fg: kAccent, label: 'Chờ làm'),
-    };
-
-({Color bg, Color fg}) priorityStyle(String p) => switch (p) {
-      'Cao'       => (bg: kCoralLight,  fg: kCoral),
-      'Trung bình' => (bg: kAmberLight, fg: kAmber),
-      _           => (bg: kAppBg,       fg: kTextMuted),
     };
 
 int avatarIndex(String initials) => switch (initials) {
