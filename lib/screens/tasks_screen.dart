@@ -185,12 +185,16 @@ class _TasksScreenState extends State<TasksScreen> {
             tw: tw,
             showGroupBadge: _showAllGroups,
             onToggle: () => _toggle(tw),
+            onEdit: () => _editTask(tw),
+            onDelete: () => _deleteTask(tw),
           );
         }
         return _DesktopTaskRow(
           tw: tw,
           showGroupBadge: _showAllGroups,
           onToggle: () => _toggle(tw),
+          onEdit: () => _editTask(tw),
+          onDelete: () => _deleteTask(tw),
         );
       },
     );
@@ -277,18 +281,231 @@ class _TasksScreenState extends State<TasksScreen> {
     _firestoreService.updateTaskStatus(tw.groupId, tw.task.id, newStatus);
   }
 
-  // ── Thêm task mới ─────────────────────────────────────────────────────────
-  void _addTask() {
-    final titleCtrl  = TextEditingController();
-    String selStatus = 'todo';
-    String selAssignee = '';
-    int selGroupIndex = widget.selectedGroupIndex;
+  // ── Sửa task ──────────────────────────────────────────────────────────────
+  void _editTask(_TaskWithGroup tw) {
+    final titleCtrl = TextEditingController(text: tw.task.title);
+    String selStatus = tw.task.status;
+    String selAssignee = tw.task.assignee;
+    DateTime? selDeadline;
 
     final statuses = [
       ('todo',  'Chờ làm',    kTextMuted),
       ('doing', 'Đang làm',   kAmber),
       ('done',  'Hoàn thành', kTeal),
     ];
+
+    String formatDate(DateTime d) {
+      return '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}';
+    }
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDlg) {
+          final group = widget.groups.firstWhere((g) => g.id == tw.groupId, orElse: () => widget.selectedGroup);
+
+          return AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+            title: const Text('Sửa task',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: kTextMain)),
+            content: SizedBox(
+              width: 360,
+              child: SingleChildScrollView(
+                child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  // Tên task
+                  TextField(
+                    controller: titleCtrl,
+                    autofocus: true,
+                    style: const TextStyle(fontSize: 13, color: kTextMain),
+                    decoration: _inputDeco('Tên công việc...'),
+                  ),
+                  const SizedBox(height: 14),
+
+                  // Thời hạn
+                  _label('Thời hạn'),
+                  GestureDetector(
+                    onTap: () async {
+                      final picked = await showDatePicker(
+                        context: ctx,
+                        initialDate: selDeadline ?? DateTime.now().add(const Duration(days: 7)),
+                        firstDate: DateTime.now().subtract(const Duration(days: 365)),
+                        lastDate: DateTime.now().add(const Duration(days: 365)),
+                      );
+                      if (picked != null) {
+                        setDlg(() => selDeadline = picked);
+                      }
+                    },
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+                      decoration: BoxDecoration(
+                        color: kAppBg,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: kBorder, width: 0.5),
+                      ),
+                      child: Row(children: [
+                        const Icon(Icons.calendar_today, size: 14, color: kTextMuted),
+                        const SizedBox(width: 8),
+                        Text(
+                          selDeadline != null ? formatDate(selDeadline!) : tw.task.deadline.isNotEmpty ? tw.task.deadline : 'Chọn ngày...',
+                          style: TextStyle(fontSize: 13,
+                              color: selDeadline != null || tw.task.deadline.isNotEmpty ? kTextMain : kTextMuted),
+                        ),
+                      ]),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+
+                  // Cột (Status)
+                  _label('Trạng thái'),
+                  Row(children: statuses.map((s) {
+                    final active = selStatus == s.$1;
+                    return GestureDetector(
+                      onTap: () => setDlg(() => selStatus = s.$1),
+                      child: Container(
+                        margin: const EdgeInsets.only(right: 8),
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: active ? _statusBg(s.$1) : kAppBg,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: active ? s.$3 : kBorder,
+                              width: active ? 1.5 : 0.5),
+                        ),
+                        child: Text(s.$2,
+                            style: TextStyle(fontSize: 12, color: active ? s.$3 : kTextMuted,
+                                fontWeight: active ? FontWeight.w500 : FontWeight.normal)),
+                      ),
+                    );
+                  }).toList()),
+                  const SizedBox(height: 14),
+
+                  // Giao cho
+                  _label('Giao cho'),
+                  StreamBuilder<List<TeamMember>>(
+                    stream: _firestoreService.watchMembers(group.id),
+                    builder: (context, snap) {
+                      final members = snap.data ?? [];
+                      return Wrap(
+                        spacing: 10, runSpacing: 8,
+                        children: members.map((m) {
+                          final active = selAssignee == m.initials;
+                          return GestureDetector(
+                            onTap: () => setDlg(() => selAssignee = m.initials),
+                            child: Column(children: [
+                              Container(
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: active ? Border.all(color: kAccent, width: 2) : null,
+                                ),
+                                child: AppAvatar(initials: m.initials,
+                                    colorIndex: m.avatarColorIndex, size: 32),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(m.name.split(' ').last,
+                                  style: TextStyle(fontSize: 11,
+                                      color: active ? kAccent : kTextMuted,
+                                      fontWeight: active ? FontWeight.w500 : FontWeight.normal)),
+                            ]),
+                          );
+                        }).toList(),
+                      );
+                    },
+                  ),
+                ]),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Huỷ', style: TextStyle(color: kTextMuted)),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: kAccent, foregroundColor: Colors.white,
+                  elevation: 0, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+                onPressed: () {
+                  final title = titleCtrl.text.trim();
+                  if (title.isEmpty) return;
+                  final deadlineStr = selDeadline != null ? formatDate(selDeadline!) : null;
+                  _firestoreService.updateTask(
+                    tw.groupId, tw.task.id,
+                    title: title != tw.task.title ? title : null,
+                    status: selStatus != tw.task.status ? selStatus : null,
+                    assignee: selAssignee != tw.task.assignee ? selAssignee : null,
+                    deadline: deadlineStr,
+                  );
+                  Navigator.pop(ctx);
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                    content: Text('Đã cập nhật task "$title"'),
+                    backgroundColor: kTeal,
+                    behavior: SnackBarBehavior.floating,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ));
+                },
+                child: const Text('Lưu'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  // ── Xoá task ──────────────────────────────────────────────────────────────
+  void _deleteTask(_TaskWithGroup tw) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        title: const Text('Xoá task?',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: kTextMain)),
+        content: Text('Bạn có chắc muốn xoá "${tw.task.title}"?\nTask sẽ bị xoá khỏi tất cả các màn hình.',
+            style: const TextStyle(fontSize: 13, color: kTextMuted)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Huỷ', style: TextStyle(color: kTextMuted)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: kCoral, foregroundColor: Colors.white,
+              elevation: 0, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            onPressed: () {
+              _firestoreService.deleteTaskEverywhere(tw.groupId, tw.task.id);
+              Navigator.pop(ctx);
+              ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                content: Text('Đã xoá task "${tw.task.title}"'),
+                backgroundColor: kCoral,
+                behavior: SnackBarBehavior.floating,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ));
+            },
+            child: const Text('Xoá'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Thêm task mới ─────────────────────────────────────────────────────────
+  void _addTask() {
+    final titleCtrl  = TextEditingController();
+    String selStatus = 'todo';
+    String selAssignee = '';
+    int selGroupIndex = widget.selectedGroupIndex;
+    DateTime? selDeadline;
+
+    final statuses = [
+      ('todo',  'Chờ làm',    kTextMuted),
+      ('doing', 'Đang làm',   kAmber),
+      ('done',  'Hoàn thành', kTeal),
+    ];
+
+    String _formatDate(DateTime d) {
+      return '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}';
+    }
 
     showDialog(
       context: context,
@@ -344,6 +561,41 @@ class _TasksScreenState extends State<TasksScreen> {
                     autofocus: true,
                     style: const TextStyle(fontSize: 13, color: kTextMain),
                     decoration: _inputDeco('Tên công việc...'),
+                  ),
+                  const SizedBox(height: 14),
+
+                  // Thời hạn (Deadline)
+                  _label('Thời hạn'),
+                  GestureDetector(
+                    onTap: () async {
+                      final picked = await showDatePicker(
+                        context: ctx,
+                        initialDate: selDeadline ?? DateTime.now().add(const Duration(days: 7)),
+                        firstDate: DateTime.now(),
+                        lastDate: DateTime.now().add(const Duration(days: 365)),
+                      );
+                      if (picked != null) {
+                        setDlg(() => selDeadline = picked);
+                      }
+                    },
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+                      decoration: BoxDecoration(
+                        color: kAppBg,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: kBorder, width: 0.5),
+                      ),
+                      child: Row(children: [
+                        const Icon(Icons.calendar_today, size: 14, color: kTextMuted),
+                        const SizedBox(width: 8),
+                        Text(
+                          selDeadline != null ? _formatDate(selDeadline!) : 'Chọn ngày...',
+                          style: TextStyle(fontSize: 13,
+                              color: selDeadline != null ? kTextMain : kTextMuted),
+                        ),
+                      ]),
+                    ),
                   ),
                   const SizedBox(height: 14),
 
@@ -421,15 +673,23 @@ class _TasksScreenState extends State<TasksScreen> {
                 onPressed: () {
                   final title = titleCtrl.text.trim();
                   if (title.isEmpty) return;
+                  if (selDeadline == null) {
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                      content: Text('Vui lòng chọn thời hạn'),
+                      backgroundColor: kCoral,
+                      behavior: SnackBarBehavior.floating,
+                    ));
+                    return;
+                  }
                   final group = widget.groups[selGroupIndex];
-                  final newTask = Task(
-                    id: '',
+                  final deadlineStr = _formatDate(selDeadline!);
+                  _firestoreService.createTaskEverywhere(
+                    groupId: group.id,
                     title: title,
                     status: selStatus,
                     assignee: selAssignee,
-                    type: 'task',
+                    deadline: deadlineStr,
                   );
-                  _firestoreService.createTask(group.id, newTask);
                   Navigator.pop(ctx);
                   ScaffoldMessenger.of(context).showSnackBar(SnackBar(
                     content: Text('Đã thêm task "$title" vào ${group.name}'),
@@ -485,8 +745,10 @@ class _DesktopTaskRow extends StatelessWidget {
   final _TaskWithGroup tw;
   final bool showGroupBadge;
   final VoidCallback onToggle;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
 
-  const _DesktopTaskRow({required this.tw, required this.showGroupBadge, required this.onToggle});
+  const _DesktopTaskRow({required this.tw, required this.showGroupBadge, required this.onToggle, required this.onEdit, required this.onDelete});
 
   @override
   Widget build(BuildContext context) {
@@ -494,55 +756,75 @@ class _DesktopTaskRow extends StatelessWidget {
     final st = statusStyle(t.status);
     final isDone = t.status == 'done';
 
-    return GestureDetector(
-      onTap: onToggle,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-        child: Row(children: [
-          Expanded(
-            flex: 5,
-            child: Row(children: [
-              Container(
-                width: 18, height: 18,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: isDone ? kTeal : Colors.transparent,
-                  border: Border.all(color: isDone ? kTeal : kBorder, width: 1.5),
-                ),
-                child: isDone ? const Icon(Icons.check, size: 10, color: Colors.white) : null,
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(t.title,
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: isDone ? kTextMuted : kTextMain,
-                      decoration: isDone ? TextDecoration.lineThrough : null,
-                    )),
-              ),
-            ]),
-          ),
-          Expanded(
-            flex: 2,
-            child: AppBadge(label: st.label, bg: st.bg, fg: st.fg),
-          ),
-          Expanded(
-            flex: 2,
-            child: Text(t.deadline.isEmpty ? '--' : t.deadline,
-                style: TextStyle(fontSize: 12,
-                    color: t.deadline == 'Hôm nay' ? kCoral : kTextMuted)),
-          ),
-          Expanded(
-            flex: 2,
-            child: AppAvatar(initials: t.assignee, colorIndex: avatarIndex(t.assignee), size: 26),
-          ),
-          if (showGroupBadge)
-            Expanded(
-              flex: 2,
-              child: AppBadge(label: tw.groupName, bg: kAccentLight, fg: kAccent),
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+      child: Row(children: [
+        // Toggle checkbox
+        GestureDetector(
+          onTap: onToggle,
+          child: Container(
+            width: 18, height: 18,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: isDone ? kTeal : Colors.transparent,
+              border: Border.all(color: isDone ? kTeal : kBorder, width: 1.5),
             ),
-        ]),
-      ),
+            child: isDone ? const Icon(Icons.check, size: 10, color: Colors.white) : null,
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          flex: 5,
+          child: Text(t.title,
+              style: TextStyle(
+                fontSize: 13,
+                color: isDone ? kTextMuted : kTextMain,
+                decoration: isDone ? TextDecoration.lineThrough : null,
+              )),
+        ),
+        Expanded(
+          flex: 2,
+          child: AppBadge(label: st.label, bg: st.bg, fg: st.fg),
+        ),
+        Expanded(
+          flex: 2,
+          child: Text(t.deadline.isEmpty ? '--' : t.deadline,
+              style: TextStyle(fontSize: 12,
+                  color: t.deadline == 'Hôm nay' ? kCoral : kTextMuted)),
+        ),
+        Expanded(
+          flex: 2,
+          child: AppAvatar(initials: t.assignee, colorIndex: avatarIndex(t.assignee), size: 26),
+        ),
+        if (showGroupBadge)
+          Expanded(
+            flex: 2,
+            child: AppBadge(label: tw.groupName, bg: kAccentLight, fg: kAccent),
+          ),
+        // Edit & Delete
+        SizedBox(
+          width: 60,
+          child: Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+            InkWell(
+              onTap: onEdit,
+              borderRadius: BorderRadius.circular(4),
+              child: const Padding(
+                padding: EdgeInsets.all(4),
+                child: Icon(Icons.edit_outlined, size: 16, color: kTextMuted),
+              ),
+            ),
+            const SizedBox(width: 4),
+            InkWell(
+              onTap: onDelete,
+              borderRadius: BorderRadius.circular(4),
+              child: const Padding(
+                padding: EdgeInsets.all(4),
+                child: Icon(Icons.delete_outline, size: 16, color: kCoral),
+              ),
+            ),
+          ]),
+        ),
+      ]),
     );
   }
 }
@@ -552,8 +834,10 @@ class _MobileTaskCard extends StatelessWidget {
   final _TaskWithGroup tw;
   final bool showGroupBadge;
   final VoidCallback onToggle;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
 
-  const _MobileTaskCard({required this.tw, required this.showGroupBadge, required this.onToggle});
+  const _MobileTaskCard({required this.tw, required this.showGroupBadge, required this.onToggle, required this.onEdit, required this.onDelete});
 
   @override
   Widget build(BuildContext context) {
@@ -561,12 +845,12 @@ class _MobileTaskCard extends StatelessWidget {
     final st = statusStyle(t.status);
     final isDone = t.status == 'done';
 
-    return GestureDetector(
-      onTap: onToggle,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        child: Row(children: [
-          Container(
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Row(children: [
+        GestureDetector(
+          onTap: onToggle,
+          child: Container(
             width: 18, height: 18,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
@@ -575,32 +859,52 @@ class _MobileTaskCard extends StatelessWidget {
             ),
             child: isDone ? const Icon(Icons.check, size: 10, color: Colors.white) : null,
           ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(t.title,
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: isDone ? kTextMuted : kTextMain,
-                    decoration: isDone ? TextDecoration.lineThrough : null,
-                  )),
-              const SizedBox(height: 6),
-              Wrap(spacing: 6, children: [
-                AppBadge(label: st.label, bg: st.bg, fg: st.fg),
-                if (showGroupBadge)
-                  AppBadge(label: tw.groupName, bg: kAccentLight, fg: kAccent),
-              ]),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(t.title,
+                style: TextStyle(
+                  fontSize: 13,
+                  color: isDone ? kTextMuted : kTextMain,
+                  decoration: isDone ? TextDecoration.lineThrough : null,
+                )),
+            const SizedBox(height: 6),
+            Wrap(spacing: 6, children: [
+              AppBadge(label: st.label, bg: st.bg, fg: st.fg),
+              if (showGroupBadge)
+                AppBadge(label: tw.groupName, bg: kAccentLight, fg: kAccent),
             ]),
-          ),
-          Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-            AppAvatar(initials: t.assignee, colorIndex: avatarIndex(t.assignee), size: 24),
-            const SizedBox(height: 4),
-            Text(t.deadline.isEmpty ? '--' : t.deadline,
-                style: TextStyle(fontSize: 11,
-                    color: t.deadline == 'Hôm nay' ? kCoral : kTextMuted)),
           ]),
+        ),
+        Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+          AppAvatar(initials: t.assignee, colorIndex: avatarIndex(t.assignee), size: 24),
+          const SizedBox(height: 4),
+          Text(t.deadline.isEmpty ? '--' : t.deadline,
+              style: TextStyle(fontSize: 11,
+                  color: t.deadline == 'Hôm nay' ? kCoral : kTextMuted)),
         ]),
-      ),
+        const SizedBox(width: 8),
+        // Edit & Delete
+        Column(mainAxisSize: MainAxisSize.min, children: [
+          InkWell(
+            onTap: onEdit,
+            borderRadius: BorderRadius.circular(4),
+            child: const Padding(
+              padding: EdgeInsets.all(4),
+              child: Icon(Icons.edit_outlined, size: 16, color: kTextMuted),
+            ),
+          ),
+          InkWell(
+            onTap: onDelete,
+            borderRadius: BorderRadius.circular(4),
+            child: const Padding(
+              padding: EdgeInsets.all(4),
+              child: Icon(Icons.delete_outline, size: 16, color: kCoral),
+            ),
+          ),
+        ]),
+      ]),
     );
   }
 }

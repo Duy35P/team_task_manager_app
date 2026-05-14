@@ -23,7 +23,6 @@ class SeedService {
         'description': group.description,
         'isActive': group.isActive,
         'createdBy': userId,
-        'channels': group.channels,
         'createdAt': FieldValue.serverTimestamp(),
       });
 
@@ -48,16 +47,6 @@ class SeedService {
         });
       }
 
-      // 5. Import messages
-      for (final msg in group.messages) {
-        await groupRef.collection('messages').add({
-          'sender': msg.sender,
-          'text': msg.text,
-          'userId': msg.isMine ? userId : '',
-          'channel': 'chung',
-          'createdAt': FieldValue.serverTimestamp(),
-        });
-      }
 
       // 6. Import activities
       for (final activity in group.activities) {

@@ -83,42 +83,7 @@ class TimelineItem {
   );
 }
 
-class Message {
-  final String id;
-  final String sender;
-  final String text;
-  final bool isMine;
-  final String userId;
-  final String channel;
-  DateTime? createdAt;
 
-  Message({
-    this.id = '',
-    required this.sender,
-    required this.text,
-    this.isMine = false,
-    this.userId = '',
-    this.channel = 'chung',
-    this.createdAt,
-  });
-
-  Map<String, dynamic> toMap() => {
-    'sender': sender,
-    'text': text,
-    'userId': userId,
-    'channel': channel,
-    'createdAt': createdAt ?? FieldValue.serverTimestamp(),
-  };
-
-  factory Message.fromMap(String id, Map<String, dynamic> map) => Message(
-    id: id,
-    sender: map['sender'] ?? '',
-    text: map['text'] ?? '',
-    userId: map['userId'] ?? '',
-    channel: map['channel'] ?? 'chung',
-    createdAt: (map['createdAt'] as Timestamp?)?.toDate(),
-  );
-}
 
 class TeamMember {
   final String id;
@@ -203,10 +168,9 @@ class Group {
   List<TeamMember> members;
   List<Task> tasks;
   List<Task> kanbanTasks;
-  List<Message> messages;
   List<GroupActivity> activities;
-  List<String> channels;
   String createdBy;
+  List<String> memberIds;
 
   Group({
     required this.id,
@@ -216,18 +180,17 @@ class Group {
     required this.members,
     required this.tasks,
     required this.kanbanTasks,
-    required this.messages,
     required this.activities,
-    List<String>? channels,
     this.createdBy = '',
-  }) : channels = channels ?? ['chung', 'dev', 'design'];
+    List<String>? memberIds,
+  }) : memberIds = memberIds ?? [];
 
   Map<String, dynamic> toMap() => {
     'name': name,
     'description': description,
     'isActive': isActive,
     'createdBy': createdBy,
-    'channels': channels,
+    'memberIds': memberIds,
     'createdAt': FieldValue.serverTimestamp(),
   };
 
@@ -237,11 +200,10 @@ class Group {
     description: map['description'] ?? '',
     isActive: map['isActive'] ?? true,
     createdBy: map['createdBy'] ?? '',
-    channels: List<String>.from(map['channels'] ?? ['chung', 'dev', 'design']),
+    memberIds: List<String>.from(map['memberIds'] ?? []),
     members: [],
     tasks: [],
     kanbanTasks: [],
-    messages: [],
     activities: [],
   );
 }
@@ -267,11 +229,7 @@ final List<Task> mockKanbanTasks = [
   Task(id: 'k8', title: 'Thiết kế màn hình Login',     status: 'done',  assignee: 'TL', type: 'kanban'),
 ];
 
-final List<Message> mockMessages = [
-  Message(sender: 'An Nhiên',  text: 'Mình vừa push xong code auth lên nhánh feature/auth nhé mọi người!'),
-  Message(sender: 'Thu Linh',  text: 'Oke mình sẽ review sau. Đang làm kanban UI, xong rồi merge cùng nhé'),
-  Message(sender: 'Minh Hoàng', text: 'Tốt lắm! Nhớ viết test cho auth module nha An. Deadline sprint 1 cuối tuần này rồi', isMine: true),
-];
+
 
 final List<TeamMember> mockMembers = [
   TeamMember(name: 'Minh Hoàng', initials: 'MH', role: 'Admin',    taskCount: 8, avatarColorIndex: 0),
@@ -298,9 +256,7 @@ final List<Group> mockGroups = [
     members: List.from(mockMembers),
     tasks: List.from(mockTasks),
     kanbanTasks: List.from(mockKanbanTasks),
-    messages: List.from(mockMessages),
     activities: List.from(mockActivities),
-    channels: ['chung', 'dev', 'design'],
   ),
 
   // Nhóm 2 — Team Backend API
@@ -332,19 +288,12 @@ final List<Group> mockGroups = [
       Task(id: 'bk6', title: 'Database Schema migration',     status: 'done',  assignee: 'DA', type: 'kanban'),
       Task(id: 'bk7', title: 'REST API User CRUD',            status: 'done',  assignee: 'MH', type: 'kanban'),
     ],
-    messages: [
-      Message(sender: 'Đức Anh',    text: 'Schema database đã xong, mọi người review PR #42 nhé!'),
-      Message(sender: 'Hải Nam',    text: 'WebSocket đang có issue với reconnect, cần thêm thời gian'),
-      Message(sender: 'Minh Hoàng', text: 'Ok, ưu tiên hoàn thành API Tasks trước nhé. Sprint review thứ 6 này', isMine: true),
-      Message(sender: 'Phương Mai', text: 'Mình đã setup xong staging server, deploy lên test được rồi'),
-    ],
     activities: [
       GroupActivity(actor: 'Đức Anh',    action: 'merge PR',       detail: 'Database Schema v2',          time: '30 phút', colorIndex: 1),
       GroupActivity(actor: 'Hải Nam',    action: 'tạo branch',     detail: 'feature/websocket',           time: '2 giờ',   colorIndex: 2),
       GroupActivity(actor: 'Phương Mai', action: 'deploy',         detail: 'Staging server v1.0.2',       time: '5 giờ',   colorIndex: 3),
       GroupActivity(actor: 'Minh Hoàng', action: 'review code',    detail: 'PR #38 — User API',           time: '1 ngày',  colorIndex: 0),
     ],
-    channels: ['chung', 'backend', 'devops'],
   ),
 
   // Nhóm 3 — Team UI/UX Design
@@ -373,17 +322,11 @@ final List<Group> mockGroups = [
       Task(id: 'uk5', title: 'Dashboard wireframe v2',        status: 'done',  assignee: 'TL', type: 'kanban'),
       Task(id: 'uk6', title: 'Design tokens document',        status: 'done',  assignee: 'AN', type: 'kanban'),
     ],
-    messages: [
-      Message(sender: 'Thu Linh',   text: 'Mình vừa update prototype Kanban trên Figma, mọi người xem feedback nhé!'),
-      Message(sender: 'An Nhiên',   text: 'Design system đã finalize, export token cho dev rồi'),
-      Message(sender: 'Quỳnh Anh',  text: 'Icon set đang làm, dự kiến xong cuối tuần này ạ'),
-    ],
     activities: [
       GroupActivity(actor: 'Thu Linh',  action: 'update file',    detail: 'Kanban prototype v3',         time: '15 phút', colorIndex: 2),
       GroupActivity(actor: 'An Nhiên',  action: 'export token',   detail: 'Design System tokens',        time: '3 giờ',   colorIndex: 1),
       GroupActivity(actor: 'Quỳnh Anh', action: 'upload assets',  detail: 'Icon set — 24 icons',         time: '1 ngày',  colorIndex: 0),
       GroupActivity(actor: 'Nhóm',      action: 'họp review',     detail: 'Sprint Design Review #2',     time: '2 ngày',  colorIndex: 3),
     ],
-    channels: ['chung', 'design', 'feedback'],
   ),
 ];

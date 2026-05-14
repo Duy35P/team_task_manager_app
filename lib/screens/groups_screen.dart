@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../theme.dart';
 import '../models.dart';
 import '../services/firestore_service.dart';
@@ -71,7 +72,6 @@ class _GroupsScreenState extends State<GroupsScreen> {
                 members: [],
                 tasks: [],
                 kanbanTasks: [],
-                messages: [],
                 activities: [],
               );
 
@@ -202,9 +202,33 @@ class _GroupsScreenState extends State<GroupsScreen> {
                     onPressed: () async {
                       final email = emailCtrl.text.trim();
                       if (email.isEmpty) return;
-                      final initials = email.substring(0, 2).toUpperCase();
+
+                      // Tìm userId của người được mời
+                      final invitedUserId = await _firestoreService.findUserIdByEmail(email);
+
+                      if (invitedUserId == null) {
+                        if (ctx.mounted) Navigator.pop(ctx);
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                            content: Text('Không tìm thấy tài khoản với email "$email"'),
+                            backgroundColor: kCoral,
+                            behavior: SnackBarBehavior.floating,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          ));
+                        }
+                        return;
+                      }
+
+                      // Lấy thông tin user được mời
+                      final userDoc = await FirebaseFirestore.instance
+                          .collection('users').doc(invitedUserId).get();
+                      final userData = userDoc.data();
+                      final memberName = userData?['name'] ?? email.split('@').first;
+                      final initials = userData?['initials'] ?? email.substring(0, 2).toUpperCase();
+
+                      // Thêm vào subcollection members
                       final newMember = TeamMember(
-                        name: email.split('@').first,
+                        name: memberName,
                         initials: initials,
                         role: selRole,
                         taskCount: 0,
@@ -212,12 +236,15 @@ class _GroupsScreenState extends State<GroupsScreen> {
                       );
                       await _firestoreService.addMember(group.id, newMember);
 
+                      // Thêm userId vào memberIds để user thấy group
+                      await _firestoreService.addMemberById(group.id, invitedUserId);
+
                       // Add activity
                       final currentUser = FirebaseAuth.instance.currentUser;
                       await _firestoreService.addActivity(group.id, GroupActivity(
                         actor: currentUser?.displayName ?? 'User',
                         action: 'đã mời',
-                        detail: email,
+                        detail: memberName,
                         time: 'Vừa xong',
                         colorIndex: 0,
                       ));
@@ -225,7 +252,7 @@ class _GroupsScreenState extends State<GroupsScreen> {
                       if (ctx.mounted) Navigator.pop(ctx);
                       if (mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                          content: Text('Đã gửi lời mời đến $email'),
+                          content: Text('Đã thêm $memberName vào nhóm! ✅'),
                           backgroundColor: kTeal,
                           behavior: SnackBarBehavior.floating,
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
@@ -392,7 +419,7 @@ class _GroupsScreenState extends State<GroupsScreen> {
                                 fontSize: 13,
                                 fontWeight: active ? FontWeight.w600 : FontWeight.normal,
                                 color: active ? kAccent : kTextMain)),
-                        Text('${g.channels.length} kênh',
+                        Text(g.description.isNotEmpty ? g.description : 'Nhóm',
                             style: const TextStyle(fontSize: 11, color: kTextMuted)),
                       ]),
                     ),

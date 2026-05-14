@@ -1,0 +1,173 @@
+# Đơn giản hóa Project TeamTask
+
+Giảm tổng số dòng code ~40% bằng cách loại bỏ code trùng lặp và gom các dialog/widget lặp đi lặp lại vào shared helpers, **giữ nguyên 100% chức năng hiện tại**.
+
+## Phân tích hiện tại
+
+| File | Dòng | Vấn đề chính |
+|---|---|---|
+| `tasks_screen.dart` | **910** | Dialog Thêm/Sửa task duplicate ~80% code. `_DesktopTaskRow` & `_MobileTaskCard` gần giống nhau. `_buildGroupSelector` copy từ dashboard/kanban/timeline. `_inputDeco` lặp ở nhiều file. |
+| `groups_screen.dart` | **578** | `_inputField` giống trong timeline. Dialog styles lặp. |
+| `account_screen.dart` | **549** | `_dlgField`, `_inputBox` gần giống `_inputField` ở groups/timeline. Login/Register form code verbose. |
+| `dashboard_screen.dart` | **427** | `_GroupSelector` widget copy ở 4 nơi (dashboard, tasks, kanban, timeline). `_viewAllTasks` bottom sheet dài. |
+| `timeline_screen.dart` | **448** | `_inputField`, `_dlgLabel`, `_buildGroupSelector` copy giống hệt. |
+| `kanban_screen.dart` | **135** | `_buildGroupSelector` copy. |
+| `models.dart` | **333** | Mock data chiếm ~120 dòng (không dùng runtime). |
+| `task_widgets.dart` | **140** | `TaskRow` & `TaskCard` không được dùng (tasks_screen tự render). |
+
+**Tổng hiện tại: ~3,450 dòng code**
+
+## Chiến lược đơn giản hóa
+
+### 1. Tạo file `lib/widgets/shared_widgets.dart` — gom widget dùng chung
+
+| Widget chung | Dùng ở | Giảm |
+|---|---|---|
+| `GroupSelector` | dashboard, tasks, kanban, timeline | ~30 dòng × 4 = **~90 dòng** |
+| `appInputDecoration()` helper | tasks, groups, account, timeline | **~60 dòng** |
+| `appDialogLabel()` helper | tasks, timeline | **~15 dòng** |
+| `showAppSnackBar()` helper | tasks, groups, account | **~30 dòng** |
+| `AppConfirmDialog` | tasks (xóa), account (logout) | **~20 dòng** |
+
+### 2. Rút gọn `tasks_screen.dart` (910 → ~550 dòng)
+
+- **Gom Add/Edit dialog**: 2 dialog (thêm + sửa) có ~85% code giống nhau → tạo 1 hàm `_showTaskDialog({Task? existing})`. Giảm ~**150 dòng**.
+- **Gom Desktop/Mobile row**: Tạo widget `_TaskItem` duy nhất xử lý cả 2 mode. Giảm ~**60 dòng**.
+- **Dùng `GroupSelector` chung**: Giảm ~**30 dòng**.
+- **Dùng shared `appInputDecoration`**: Giảm ~**10 dòng**.
+
+### 3. Rút gọn `account_screen.dart` (549 → ~350 dòng)
+
+- **Dùng shared `appInputDecoration`**: Bỏ `_dlgField`, `_inputBox`, `_fieldLabel` riêng → dùng chung. Giảm ~**50 dòng**.
+- **Gom `_showSnack` → dùng `showAppSnackBar`**: Giảm ~**10 dòng**.
+- **Rút gọn Register dialog**: Dùng shared helpers. Giảm ~**30 dòng**.
+
+### 4. Rút gọn `groups_screen.dart` (578 → ~400 dòng)
+
+- **Dùng shared `appInputDecoration`**: Bỏ `_inputField` riêng. Giảm ~**25 dòng**.
+- **Dùng `showAppSnackBar`**: Giảm ~**15 dòng**.
+- **Rút gọn `_inviteMember`**: Dùng shared helpers. Giảm ~**20 dòng**.
+
+### 5. Rút gọn `dashboard_screen.dart` (427 → ~310 dòng)
+
+- **Dùng `GroupSelector` chung**: Bỏ `_GroupSelector` private class. Giảm ~**50 dòng**.
+- **Rút gọn `_viewAllTasks` bottom sheet**: Giảm ~**15 dòng**.
+
+### 6. Rút gọn `timeline_screen.dart` (448 → ~310 dòng)
+
+- **Dùng `GroupSelector` chung**: Giảm ~**35 dòng**.
+- **Dùng shared `appInputDecoration`**: Bỏ `_inputField` riêng. Giảm ~**15 dòng**.
+- **Dùng `appDialogLabel`**: Giảm ~**5 dòng**.
+
+### 7. Rút gọn `kanban_screen.dart` (135 → ~95 dòng)
+
+- **Dùng `GroupSelector` chung**: Giảm ~**35 dòng**.
+
+### 8. Dọn dẹp `models.dart` (333 → ~210 dòng)
+
+- **Xóa mock data** (`mockTasks`, `mockKanbanTasks`, `mockMembers`, `mockActivities`, `mockGroups`): Không dùng runtime nữa (app đã chuyển sang Firestore). Giảm ~**120 dòng**.
+
+### 9. Xóa widget không dùng trong `task_widgets.dart`
+
+- `TaskRow` và `TaskCard` không được import/sử dụng bởi bất kỳ screen nào → xóa. Giảm ~**100 dòng**.
+
+## Tổng kết dự kiến
+
+| Metric | Trước | Sau | Giảm |
+|---|---|---|---|
+| `tasks_screen.dart` | 910 | ~550 | **~40%** |
+| `account_screen.dart` | 549 | ~350 | **~36%** |
+| `groups_screen.dart` | 578 | ~400 | **~31%** |
+| `dashboard_screen.dart` | 427 | ~310 | **~27%** |
+| `timeline_screen.dart` | 448 | ~310 | **~31%** |
+| `kanban_screen.dart` | 135 | ~95 | **~30%** |
+| `models.dart` | 333 | ~210 | **~37%** |
+| `task_widgets.dart` | 140 | ~40 | **~71%** |
+| **Tổng** | **~3,450** | **~2,265** | **~34%** |
+
+## Proposed Changes
+
+### Shared Widgets
+
+#### [NEW] [shared_widgets.dart](file:///e:/DAIHOC/ltdd/lib/widgets/shared_widgets.dart)
+- `GroupSelector` widget — thay thế 4 bản copy ở dashboard/tasks/kanban/timeline
+- `appInputDecoration()` — InputDecoration chuẩn dùng chung
+- `appDialogLabel()` — Widget label cho dialog
+- `showAppSnackBar()` — Helper hiển thị SnackBar
+
+---
+
+### Tasks Screen
+
+#### [MODIFY] [tasks_screen.dart](file:///e:/DAIHOC/ltdd/lib/screens/tasks_screen.dart)
+- Gom `_addTask()` + `_editTask()` → `_showTaskDialog({_TaskWithGroup? existing})`
+- Gom `_DesktopTaskRow` + `_MobileTaskCard` → `_TaskItem` duy nhất
+- Import `GroupSelector` từ shared_widgets
+- Import `appInputDecoration`, `showAppSnackBar`
+
+---
+
+### Account Screen
+
+#### [MODIFY] [account_screen.dart](file:///e:/DAIHOC/ltdd/lib/screens/account_screen.dart)
+- Bỏ `_dlgField`, `_inputBox`, `_fieldLabel` → dùng `appInputDecoration` chung
+- Bỏ `_showSnack` → dùng `showAppSnackBar`
+
+---
+
+### Groups Screen
+
+#### [MODIFY] [groups_screen.dart](file:///e:/DAIHOC/ltdd/lib/screens/groups_screen.dart)
+- Bỏ `_inputField` → dùng `appInputDecoration` chung
+- Bỏ SnackBar inline → dùng `showAppSnackBar`
+
+---
+
+### Dashboard Screen
+
+#### [MODIFY] [dashboard_screen.dart](file:///e:/DAIHOC/ltdd/lib/screens/dashboard_screen.dart)
+- Bỏ `_GroupSelector` private class → import `GroupSelector` chung
+- Rút gọn `_viewAllTasks`
+
+---
+
+### Timeline Screen
+
+#### [MODIFY] [timeline_screen.dart](file:///e:/DAIHOC/ltdd/lib/screens/timeline_screen.dart)
+- Import `GroupSelector`, `appInputDecoration`, `appDialogLabel`
+- Bỏ `_inputField`, `_dlgLabel`, `_buildGroupSelector`
+
+---
+
+### Kanban Screen
+
+#### [MODIFY] [kanban_screen.dart](file:///e:/DAIHOC/ltdd/lib/screens/kanban_screen.dart)
+- Import `GroupSelector`
+- Bỏ `_buildGroupSelector`
+
+---
+
+### Models
+
+#### [MODIFY] [models.dart](file:///e:/DAIHOC/ltdd/lib/models.dart)
+- Xóa toàn bộ mock data (dòng 211-332)
+
+---
+
+### Task Widgets
+
+#### [MODIFY] [task_widgets.dart](file:///e:/DAIHOC/ltdd/lib/widgets/task_widgets.dart)
+- Xóa `TaskRow` và `TaskCard` (không dùng)
+- Giữ `FilterTab` và `TaskHeaderCell`
+
+## Verification Plan
+
+### Automated Tests
+```bash
+cd e:\DAIHOC\ltdd
+flutter analyze
+```
+
+### Manual Verification
+- Kiểm tra app build thành công
+- Tất cả chức năng hiện tại vẫn hoạt động (tasks CRUD, kanban drag-drop, timeline, groups, account login/register/logout)

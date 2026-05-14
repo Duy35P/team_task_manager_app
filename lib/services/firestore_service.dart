@@ -8,15 +8,21 @@ class FirestoreService {
   // ── GROUPS ──────────────────────────────────────────────────────────────
   // ══════════════════════════════════════════════════════════════════════════
 
-  /// Lấy stream danh sách groups của user
+  /// Lấy stream danh sách groups mà user là thành viên
   Stream<List<Group>> watchGroups(String userId) {
-    return _db.collection('groups').snapshots().map((snap) =>
+    return _db.collection('groups')
+        .where('memberIds', arrayContains: userId)
+        .snapshots().map((snap) =>
       snap.docs.map((doc) => Group.fromMap(doc.id, doc.data())).toList(),
     );
   }
 
   /// Tạo group mới
   Future<String> createGroup(Group group, String userId) async {
+    // Đảm bảo creator nằm trong memberIds
+    if (!group.memberIds.contains(userId)) {
+      group.memberIds.add(userId);
+    }
     final ref = await _db.collection('groups').add(group.toMap());
 
     // Thêm creator vào subcollection members
@@ -71,16 +77,197 @@ class FirestoreService {
         .collection('tasks').add(task.toMap());
   }
 
-  /// Cập nhật status task
-  Future<void> updateTaskStatus(String groupId, String taskId, String status) async {
+  /// Tạo task ở tất cả nơi: task list, kanban, và timeline
+  Future<void> createTaskEverywhere({
+    required String groupId,
+    required String title,
+    required String status,
+    required String assignee,
+    required String deadline,
+  }) async {
+    // 1. Tạo task cho Tasks screen
+    final taskDoc = await _db.collection('groups').doc(groupId)
+        .collection('tasks').add(Task(
+      id: '',
+      title: title,
+      status: status,
+      assignee: assignee,
+      deadline: deadline,
+      type: 'task',
+    ).toMap());
+
+    // 2. Tạo task cho Kanban screen
     await _db.collection('groups').doc(groupId)
-        .collection('tasks').doc(taskId).update({'status': status});
+        .collection('tasks').add(Task(
+      id: '',
+      title: title,
+      status: status,
+      assignee: assignee,
+      deadline: deadline,
+      type: 'kanban',
+    ).toMap());
+
+    // 3. Tạo timeline item
+    final statusLabel = switch (status) {
+      'done'  => 'Hoàn thành',
+      'doing' => 'Đang làm',
+      _       => 'Chờ làm',
+    };
+    final statusColor = switch (status) {
+      'done'  => 0xFF26A69A,  // kTeal
+      'doing' => 0xFFFFB74D,  // kAmber
+      _       => 0xFF7B61FF,  // kAccent
+    };
+    await _db.collection('groups').doc(groupId)
+        .collection('timeline').add(TimelineItem(
+      id: '',
+      taskId: taskDoc.id,
+      title: title,
+      label: statusLabel,
+      colorValue: statusColor,
+      startCol: 0,
+      spanCols: 1,
+    ).toMap());
+  }
+
+  /// Cập nhật status task + đồng bộ sang type kia (task↔kanban) và timeline
+  Future<void> updateTaskStatus(String groupId, String taskId, String status) async {
+    final tasksCol = _db.collection('groups').doc(groupId).collection('tasks');
+
+    // 1. Cập nhật task hiện tại
+    final doc = await tasksCol.doc(taskId).get();
+    if (!doc.exists) return;
+    await tasksCol.doc(taskId).update({'status': status});
+
+    final data = doc.data()!;
+    final title = data['title'] as String? ?? '';
+    final currentType = data['type'] as String? ?? 'task';
+    final otherType = currentType == 'task' ? 'kanban' : 'task';
+
+    // 2. Đồng bộ sang type kia (tìm theo title)
+    final otherSnap = await tasksCol
+        .where('type', isEqualTo: otherType)
+        .where('title', isEqualTo: title)
+        .limit(1)
+        .get();
+    for (final d in otherSnap.docs) {
+      await d.reference.update({'status': status});
+    }
+
+    // 3. Cập nhật timeline item (tìm theo taskId)
+    final statusLabel = switch (status) {
+      'done'  => 'Hoàn thành',
+      'doing' => 'Đang làm',
+      _       => 'Chờ làm',
+    };
+    final statusColor = switch (status) {
+      'done'  => 0xFF26A69A,
+      'doing' => 0xFFFFB74D,
+      _       => 0xFF7B61FF,
+    };
+    final tlCol = _db.collection('groups').doc(groupId).collection('timeline');
+    final tlSnap = await tlCol.where('taskId', isEqualTo: taskId).get();
+    for (final d in tlSnap.docs) {
+      await d.reference.update({'label': statusLabel, 'colorValue': statusColor});
+    }
+  }
+
+  /// Cập nhật thông tin task (title, assignee, deadline, status)
+  Future<void> updateTask(String groupId, String taskId, {
+    String? title,
+    String? status,
+    String? assignee,
+    String? deadline,
+  }) async {
+    final updates = <String, dynamic>{};
+    if (title != null) updates['title'] = title;
+    if (status != null) updates['status'] = status;
+    if (assignee != null) updates['assignee'] = assignee;
+    if (deadline != null) updates['deadline'] = deadline;
+    if (updates.isEmpty) return;
+
+    final tasksCol = _db.collection('groups').doc(groupId).collection('tasks');
+    final doc = await tasksCol.doc(taskId).get();
+    if (!doc.exists) return;
+
+    final oldTitle = doc.data()?['title'] as String? ?? '';
+    final currentType = doc.data()?['type'] as String? ?? 'task';
+    final otherType = currentType == 'task' ? 'kanban' : 'task';
+
+    await tasksCol.doc(taskId).update(updates);
+
+    // Đồng bộ sang type kia
+    final otherSnap = await tasksCol
+        .where('type', isEqualTo: otherType)
+        .where('title', isEqualTo: oldTitle)
+        .limit(1)
+        .get();
+    for (final d in otherSnap.docs) {
+      await d.reference.update(updates);
+    }
+
+    // Cập nhật timeline nếu title thay đổi hoặc status thay đổi
+    final tlCol = _db.collection('groups').doc(groupId).collection('timeline');
+    final tlSnap = await tlCol.where('taskId', isEqualTo: taskId).get();
+    if (tlSnap.docs.isNotEmpty) {
+      final tlUpdates = <String, dynamic>{};
+      if (title != null) tlUpdates['title'] = title;
+      if (status != null) {
+        tlUpdates['label'] = switch (status) {
+          'done'  => 'Hoàn thành',
+          'doing' => 'Đang làm',
+          _       => 'Chờ làm',
+        };
+        tlUpdates['colorValue'] = switch (status) {
+          'done'  => 0xFF26A69A,
+          'doing' => 0xFFFFB74D,
+          _       => 0xFF7B61FF,
+        };
+      }
+      if (tlUpdates.isNotEmpty) {
+        for (final d in tlSnap.docs) {
+          await d.reference.update(tlUpdates);
+        }
+      }
+    }
   }
 
   /// Xóa task
   Future<void> deleteTask(String groupId, String taskId) async {
     await _db.collection('groups').doc(groupId)
         .collection('tasks').doc(taskId).delete();
+  }
+
+  /// Xóa task ở tất cả nơi (task, kanban, timeline)
+  Future<void> deleteTaskEverywhere(String groupId, String taskId) async {
+    final tasksCol = _db.collection('groups').doc(groupId).collection('tasks');
+    final doc = await tasksCol.doc(taskId).get();
+    if (!doc.exists) return;
+
+    final data = doc.data()!;
+    final title = data['title'] as String? ?? '';
+    final currentType = data['type'] as String? ?? 'task';
+    final otherType = currentType == 'task' ? 'kanban' : 'task';
+
+    // Xóa task hiện tại
+    await tasksCol.doc(taskId).delete();
+
+    // Xóa task type kia
+    final otherSnap = await tasksCol
+        .where('type', isEqualTo: otherType)
+        .where('title', isEqualTo: title)
+        .limit(1)
+        .get();
+    for (final d in otherSnap.docs) {
+      await d.reference.delete();
+    }
+
+    // Xóa timeline item
+    final tlCol = _db.collection('groups').doc(groupId).collection('timeline');
+    final tlSnap = await tlCol.where('taskId', isEqualTo: taskId).get();
+    for (final d in tlSnap.docs) {
+      await d.reference.delete();
+    }
   }
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -131,32 +318,24 @@ class FirestoreService {
         .collection('members').doc(memberId).delete();
   }
 
-  // ══════════════════════════════════════════════════════════════════════════
-  // ── MESSAGES ───────────────────────────────────────────────────────────
-  // ══════════════════════════════════════════════════════════════════════════
-
-  /// Lấy stream tin nhắn (theo channel)
-  Stream<List<Message>> watchMessages(String groupId, String channel) {
-    return _db.collection('groups').doc(groupId)
-        .collection('messages')
-        .where('channel', isEqualTo: channel)
-        .snapshots().map((snap) {
-      final msgs = snap.docs.map((doc) => Message.fromMap(doc.id, doc.data())).toList();
-      // Sort client-side để tránh cần composite index
-      msgs.sort((a, b) {
-        final aTime = a.createdAt ?? DateTime(2000);
-        final bTime = b.createdAt ?? DateTime(2000);
-        return aTime.compareTo(bTime);
-      });
-      return msgs;
+  /// Thêm userId vào memberIds của group (để user thấy group)
+  Future<void> addMemberById(String groupId, String userId) async {
+    await _db.collection('groups').doc(groupId).update({
+      'memberIds': FieldValue.arrayUnion([userId]),
     });
   }
 
-  /// Gửi tin nhắn
-  Future<void> sendMessage(String groupId, Message msg) async {
-    await _db.collection('groups').doc(groupId)
-        .collection('messages').add(msg.toMap());
+  /// Tìm userId bằng email từ collection users
+  Future<String?> findUserIdByEmail(String email) async {
+    final snap = await _db.collection('users')
+        .where('email', isEqualTo: email)
+        .limit(1)
+        .get();
+    if (snap.docs.isEmpty) return null;
+    return snap.docs.first.id;
   }
+
+
 
   // ══════════════════════════════════════════════════════════════════════════
   // ── ACTIVITIES ─────────────────────────────────────────────────────────

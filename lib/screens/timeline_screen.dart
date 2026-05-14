@@ -373,8 +373,6 @@ class _TimelineScreenState extends State<TimelineScreen> {
               backgroundColor: kAppBg,
               appBar: AppTopBar(
                 title: 'Timeline',
-                actionLabel: '+ Thêm mốc',
-                onAction: () => _addToTimeline(tasks, items),
               ),
               body: Padding(
                 padding: const EdgeInsets.all(20),
