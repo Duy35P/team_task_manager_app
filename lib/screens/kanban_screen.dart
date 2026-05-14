@@ -4,6 +4,7 @@ import '../models.dart';
 import '../services/firestore_service.dart';
 import '../widgets/app_top_bar.dart';
 import '../widgets/kanban_widgets.dart';
+import '../widgets/shared_widgets.dart';
 import '../responsive.dart';
 
 class KanbanScreen extends StatefulWidget {
@@ -41,14 +42,16 @@ class _KanbanScreenState extends State<KanbanScreen> {
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ── Group selector ──────────────────────────────────────────
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-            child: _buildGroupSelector(),
+            child: GroupSelector(
+              groups: widget.groups,
+              selectedIndex: widget.selectedGroupIndex,
+              onChanged: widget.onGroupChanged,
+            ),
           ),
           const SizedBox(height: 12),
 
-          // ── Kanban columns ──────────────────────────────────────────
           Expanded(
             child: StreamBuilder<List<Task>>(
               stream: _firestoreService.watchTasks(widget.selectedGroup.id, type: 'kanban'),
@@ -86,49 +89,6 @@ class _KanbanScreenState extends State<KanbanScreen> {
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildGroupSelector() {
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(
-        children: widget.groups.asMap().entries.map((entry) {
-          final i = entry.key;
-          final g = entry.value;
-          final active = i == widget.selectedGroupIndex;
-          return GestureDetector(
-            onTap: () => widget.onGroupChanged(i),
-            child: Container(
-              margin: const EdgeInsets.only(right: 8),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-              decoration: BoxDecoration(
-                color: active ? kAccentLight : kCardBg,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                  color: active ? kAccent : kBorder,
-                  width: active ? 1.5 : 0.5,
-                ),
-              ),
-              child: Row(mainAxisSize: MainAxisSize.min, children: [
-                Container(
-                  width: 8, height: 8,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: active ? kAccent : kTextMuted,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Text(g.name,
-                    style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: active ? FontWeight.w600 : FontWeight.normal,
-                        color: active ? kAccent : kTextMuted)),
-              ]),
-            ),
-          );
-        }).toList(),
       ),
     );
   }

@@ -5,6 +5,7 @@ import '../models.dart';
 import '../services/firestore_service.dart';
 import '../widgets/app_top_bar.dart';
 import '../widgets/task_widgets.dart';
+import '../widgets/shared_widgets.dart';
 import '../responsive.dart';
 
 class TasksScreen extends StatefulWidget {
@@ -53,21 +54,28 @@ class _TasksScreenState extends State<TasksScreen> {
 
     return Scaffold(
       backgroundColor: kAppBg,
-      appBar: AppTopBar(title: 'Công việc', actionLabel: '+ Thêm task', onAction: _addTask),
+      appBar: AppTopBar(title: 'Công việc', actionLabel: '+ Thêm task', onAction: () => _showTaskDialog()),
       body: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          // ── Group selector ────────────────────────────────────────────
-          _buildGroupSelector(),
+          GroupSelector(
+            groups: widget.groups,
+            selectedIndex: widget.selectedGroupIndex,
+            onChanged: (i) {
+              setState(() => _showAllGroups = false);
+              widget.onGroupChanged(i);
+            },
+            showAllOption: true,
+            allSelected: _showAllGroups,
+            onSelectAll: () => setState(() => _showAllGroups = true),
+          ),
           const SizedBox(height: 12),
 
-          // ── Task table ────────────────────────────────────────────────
           Expanded(
             child: AppCard(
               padding: EdgeInsets.zero,
               radius: 12,
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                // Filter tabs
                 SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
                   padding: const EdgeInsets.all(16),
@@ -100,9 +108,7 @@ class _TasksScreenState extends State<TasksScreen> {
                     ]),
                   ),
                 Expanded(
-                  child: _showAllGroups
-                      ? _buildAllGroupsTasks(mobile)
-                      : _buildSingleGroupTasks(mobile),
+                  child: _showAllGroups ? _buildAllGroupsTasks(mobile) : _buildSingleGroupTasks(mobile),
                 ),
               ]),
             ),
@@ -127,8 +133,6 @@ class _TasksScreenState extends State<TasksScreen> {
   }
 
   Widget _buildAllGroupsTasks(bool mobile) {
-    // For "all groups", we show tasks from all groups
-    // Simple approach: use the groups list and build streams for each
     return StreamBuilder<List<_TaskWithGroup>>(
       stream: _watchAllGroupsTasks(),
       builder: (context, snapshot) {
@@ -140,16 +144,15 @@ class _TasksScreenState extends State<TasksScreen> {
 
   Stream<List<_TaskWithGroup>> _watchAllGroupsTasks() {
     final streams = widget.groups.map((g) =>
-      _firestoreService.watchTasks(g.id, type: 'task').map((tasks) =>
-        tasks.map((t) => _TaskWithGroup(task: t, groupName: g.name, groupId: g.id)).toList()
-      )
+        _firestoreService.watchTasks(g.id, type: 'task').map((tasks) =>
+            tasks.map((t) => _TaskWithGroup(task: t, groupName: g.name, groupId: g.id)).toList()
+        )
     ).toList();
 
     if (streams.isEmpty) return Stream.value([]);
 
     return streams.first.asyncExpand((first) {
       if (streams.length == 1) return Stream.value(first);
-      // Combine all streams
       return _combineStreams(streams);
     });
   }
@@ -170,108 +173,19 @@ class _TasksScreenState extends State<TasksScreen> {
   Widget _buildTaskList(List<_TaskWithGroup> filtered, bool mobile) {
     if (filtered.isEmpty) {
       return const Center(
-        child: Text('Không có công việc nào',
-            style: TextStyle(fontSize: 13, color: kTextMuted)),
+        child: Text('Không có công việc nào', style: TextStyle(fontSize: 13, color: kTextMuted)),
       );
     }
     return ListView.separated(
       itemCount: filtered.length,
-      separatorBuilder: (_, __) =>
-          const Divider(height: 0, color: kBorder, thickness: 0.5),
-      itemBuilder: (_, i) {
-        final tw = filtered[i];
-        if (mobile) {
-          return _MobileTaskCard(
-            tw: tw,
-            showGroupBadge: _showAllGroups,
-            onToggle: () => _toggle(tw),
-            onEdit: () => _editTask(tw),
-            onDelete: () => _deleteTask(tw),
-          );
-        }
-        return _DesktopTaskRow(
-          tw: tw,
-          showGroupBadge: _showAllGroups,
-          onToggle: () => _toggle(tw),
-          onEdit: () => _editTask(tw),
-          onDelete: () => _deleteTask(tw),
-        );
-      },
-    );
-  }
-
-  // ── Group selector with "Tất cả nhóm" ────────────────────────────────────
-  Widget _buildGroupSelector() {
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(
-        children: [
-          // "Tất cả nhóm" chip
-          GestureDetector(
-            onTap: () => setState(() => _showAllGroups = true),
-            child: Container(
-              margin: const EdgeInsets.only(right: 8),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-              decoration: BoxDecoration(
-                color: _showAllGroups ? kAccentLight : kCardBg,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                  color: _showAllGroups ? kAccent : kBorder,
-                  width: _showAllGroups ? 1.5 : 0.5,
-                ),
-              ),
-              child: Row(mainAxisSize: MainAxisSize.min, children: [
-                Icon(Icons.groups_outlined, size: 16,
-                    color: _showAllGroups ? kAccent : kTextMuted),
-                const SizedBox(width: 6),
-                Text('Tất cả nhóm',
-                    style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: _showAllGroups ? FontWeight.w600 : FontWeight.normal,
-                        color: _showAllGroups ? kAccent : kTextMuted)),
-              ]),
-            ),
-          ),
-          // Individual group chips
-          ...widget.groups.asMap().entries.map((entry) {
-            final i = entry.key;
-            final g = entry.value;
-            final active = !_showAllGroups && i == widget.selectedGroupIndex;
-            return GestureDetector(
-              onTap: () {
-                setState(() => _showAllGroups = false);
-                widget.onGroupChanged(i);
-              },
-              child: Container(
-                margin: const EdgeInsets.only(right: 8),
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                decoration: BoxDecoration(
-                  color: active ? kAccentLight : kCardBg,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                    color: active ? kAccent : kBorder,
-                    width: active ? 1.5 : 0.5,
-                  ),
-                ),
-                child: Row(mainAxisSize: MainAxisSize.min, children: [
-                  Container(
-                    width: 8, height: 8,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: active ? kAccent : kTextMuted,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Text(g.name,
-                      style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: active ? FontWeight.w600 : FontWeight.normal,
-                          color: active ? kAccent : kTextMuted)),
-                ]),
-              ),
-            );
-          }),
-        ],
+      separatorBuilder: (_, __) => const Divider(height: 0, color: kBorder, thickness: 0.5),
+      itemBuilder: (_, i) => _TaskItem(
+        tw: filtered[i],
+        mobile: mobile,
+        showGroupBadge: _showAllGroups,
+        onToggle: () => _toggle(filtered[i]),
+        onEdit: () => _showTaskDialog(existing: filtered[i]),
+        onDelete: () => _deleteTask(filtered[i]),
       ),
     );
   }
@@ -281,11 +195,29 @@ class _TasksScreenState extends State<TasksScreen> {
     _firestoreService.updateTaskStatus(tw.groupId, tw.task.id, newStatus);
   }
 
-  // ── Sửa task ──────────────────────────────────────────────────────────────
-  void _editTask(_TaskWithGroup tw) {
-    final titleCtrl = TextEditingController(text: tw.task.title);
-    String selStatus = tw.task.status;
-    String selAssignee = tw.task.assignee;
+  void _deleteTask(_TaskWithGroup tw) {
+    showDialog(
+      context: context,
+      builder: (_) => AppConfirmDialog(
+        title: 'Xoá task?',
+        content: 'Bạn có chắc muốn xoá "${tw.task.title}"?\nTask sẽ bị xoá khỏi tất cả các màn hình.',
+        confirmText: 'Xoá',
+        onConfirm: () {
+          _firestoreService.deleteTaskEverywhere(tw.groupId, tw.task.id);
+          showAppSnackBar(context, 'Đã xoá task "${tw.task.title}"', backgroundColor: kCoral);
+        },
+      ),
+    );
+  }
+
+  void _showTaskDialog({_TaskWithGroup? existing}) {
+    final isEdit = existing != null;
+    final titleCtrl = TextEditingController(text: isEdit ? existing!.task.title : '');
+    String selStatus = isEdit ? existing!.task.status : 'todo';
+    String selAssignee = isEdit ? existing!.task.assignee : '';
+    int selGroupIndex = isEdit
+        ? widget.groups.indexWhere((g) => g.id == existing!.groupId)
+        : widget.selectedGroupIndex;
     DateTime? selDeadline;
 
     final statuses = [
@@ -302,230 +234,19 @@ class _TasksScreenState extends State<TasksScreen> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDlg) {
-          final group = widget.groups.firstWhere((g) => g.id == tw.groupId, orElse: () => widget.selectedGroup);
-
-          return AlertDialog(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-            title: const Text('Sửa task',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: kTextMain)),
-            content: SizedBox(
-              width: 360,
-              child: SingleChildScrollView(
-                child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  // Tên task
-                  TextField(
-                    controller: titleCtrl,
-                    autofocus: true,
-                    style: const TextStyle(fontSize: 13, color: kTextMain),
-                    decoration: _inputDeco('Tên công việc...'),
-                  ),
-                  const SizedBox(height: 14),
-
-                  // Thời hạn
-                  _label('Thời hạn'),
-                  GestureDetector(
-                    onTap: () async {
-                      final picked = await showDatePicker(
-                        context: ctx,
-                        initialDate: selDeadline ?? DateTime.now().add(const Duration(days: 7)),
-                        firstDate: DateTime.now().subtract(const Duration(days: 365)),
-                        lastDate: DateTime.now().add(const Duration(days: 365)),
-                      );
-                      if (picked != null) {
-                        setDlg(() => selDeadline = picked);
-                      }
-                    },
-                    child: Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
-                      decoration: BoxDecoration(
-                        color: kAppBg,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: kBorder, width: 0.5),
-                      ),
-                      child: Row(children: [
-                        const Icon(Icons.calendar_today, size: 14, color: kTextMuted),
-                        const SizedBox(width: 8),
-                        Text(
-                          selDeadline != null ? formatDate(selDeadline!) : tw.task.deadline.isNotEmpty ? tw.task.deadline : 'Chọn ngày...',
-                          style: TextStyle(fontSize: 13,
-                              color: selDeadline != null || tw.task.deadline.isNotEmpty ? kTextMain : kTextMuted),
-                        ),
-                      ]),
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-
-                  // Cột (Status)
-                  _label('Trạng thái'),
-                  Row(children: statuses.map((s) {
-                    final active = selStatus == s.$1;
-                    return GestureDetector(
-                      onTap: () => setDlg(() => selStatus = s.$1),
-                      child: Container(
-                        margin: const EdgeInsets.only(right: 8),
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: active ? _statusBg(s.$1) : kAppBg,
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: active ? s.$3 : kBorder,
-                              width: active ? 1.5 : 0.5),
-                        ),
-                        child: Text(s.$2,
-                            style: TextStyle(fontSize: 12, color: active ? s.$3 : kTextMuted,
-                                fontWeight: active ? FontWeight.w500 : FontWeight.normal)),
-                      ),
-                    );
-                  }).toList()),
-                  const SizedBox(height: 14),
-
-                  // Giao cho
-                  _label('Giao cho'),
-                  StreamBuilder<List<TeamMember>>(
-                    stream: _firestoreService.watchMembers(group.id),
-                    builder: (context, snap) {
-                      final members = snap.data ?? [];
-                      return Wrap(
-                        spacing: 10, runSpacing: 8,
-                        children: members.map((m) {
-                          final active = selAssignee == m.initials;
-                          return GestureDetector(
-                            onTap: () => setDlg(() => selAssignee = m.initials),
-                            child: Column(children: [
-                              Container(
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(20),
-                                  border: active ? Border.all(color: kAccent, width: 2) : null,
-                                ),
-                                child: AppAvatar(initials: m.initials,
-                                    colorIndex: m.avatarColorIndex, size: 32),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(m.name.split(' ').last,
-                                  style: TextStyle(fontSize: 11,
-                                      color: active ? kAccent : kTextMuted,
-                                      fontWeight: active ? FontWeight.w500 : FontWeight.normal)),
-                            ]),
-                          );
-                        }).toList(),
-                      );
-                    },
-                  ),
-                ]),
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('Huỷ', style: TextStyle(color: kTextMuted)),
-              ),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: kAccent, foregroundColor: Colors.white,
-                  elevation: 0, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                ),
-                onPressed: () {
-                  final title = titleCtrl.text.trim();
-                  if (title.isEmpty) return;
-                  final deadlineStr = selDeadline != null ? formatDate(selDeadline!) : null;
-                  _firestoreService.updateTask(
-                    tw.groupId, tw.task.id,
-                    title: title != tw.task.title ? title : null,
-                    status: selStatus != tw.task.status ? selStatus : null,
-                    assignee: selAssignee != tw.task.assignee ? selAssignee : null,
-                    deadline: deadlineStr,
-                  );
-                  Navigator.pop(ctx);
-                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                    content: Text('Đã cập nhật task "$title"'),
-                    backgroundColor: kTeal,
-                    behavior: SnackBarBehavior.floating,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                  ));
-                },
-                child: const Text('Lưu'),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-  }
-
-  // ── Xoá task ──────────────────────────────────────────────────────────────
-  void _deleteTask(_TaskWithGroup tw) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-        title: const Text('Xoá task?',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: kTextMain)),
-        content: Text('Bạn có chắc muốn xoá "${tw.task.title}"?\nTask sẽ bị xoá khỏi tất cả các màn hình.',
-            style: const TextStyle(fontSize: 13, color: kTextMuted)),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Huỷ', style: TextStyle(color: kTextMuted)),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: kCoral, foregroundColor: Colors.white,
-              elevation: 0, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-            ),
-            onPressed: () {
-              _firestoreService.deleteTaskEverywhere(tw.groupId, tw.task.id);
-              Navigator.pop(ctx);
-              ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                content: Text('Đã xoá task "${tw.task.title}"'),
-                backgroundColor: kCoral,
-                behavior: SnackBarBehavior.floating,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-              ));
-            },
-            child: const Text('Xoá'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ── Thêm task mới ─────────────────────────────────────────────────────────
-  void _addTask() {
-    final titleCtrl  = TextEditingController();
-    String selStatus = 'todo';
-    String selAssignee = '';
-    int selGroupIndex = widget.selectedGroupIndex;
-    DateTime? selDeadline;
-
-    final statuses = [
-      ('todo',  'Chờ làm',    kTextMuted),
-      ('doing', 'Đang làm',   kAmber),
-      ('done',  'Hoàn thành', kTeal),
-    ];
-
-    String _formatDate(DateTime d) {
-      return '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}';
-    }
-
-    showDialog(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDlg) {
           final selectedGroup = widget.groups[selGroupIndex];
-
           return AlertDialog(
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-            title: const Text('Thêm task mới',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: kTextMain)),
+            title: Text(isEdit ? 'Sửa task' : 'Thêm task mới',
+                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: kTextMain)),
             content: SizedBox(
               width: 360,
               child: SingleChildScrollView(
                 child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  // Chọn nhóm
-                  _label('Nhóm'),
-                  SizedBox(
-                    width: double.infinity,
-                    child: Container(
+                  if (!isEdit) ...[
+                    appDialogLabel('Nhóm'),
+                    Container(
+                      width: double.infinity,
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                       decoration: BoxDecoration(
                         color: kAppBg,
@@ -539,7 +260,7 @@ class _TasksScreenState extends State<TasksScreen> {
                           icon: const Icon(Icons.expand_more, color: kTextMuted, size: 18),
                           style: const TextStyle(fontSize: 13, color: kTextMain),
                           items: widget.groups.asMap().entries.map((e) =>
-                            DropdownMenuItem<int>(value: e.key, child: Text(e.value.name)),
+                              DropdownMenuItem<int>(value: e.key, child: Text(e.value.name)),
                           ).toList(),
                           onChanged: (i) {
                             if (i != null) {
@@ -552,31 +273,27 @@ class _TasksScreenState extends State<TasksScreen> {
                         ),
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 14),
+                    const SizedBox(height: 14),
+                  ],
 
-                  // Tên task
                   TextField(
                     controller: titleCtrl,
                     autofocus: true,
                     style: const TextStyle(fontSize: 13, color: kTextMain),
-                    decoration: _inputDeco('Tên công việc...'),
+                    decoration: appInputDecoration(hintText: 'Tên công việc...'),
                   ),
                   const SizedBox(height: 14),
 
-                  // Thời hạn (Deadline)
-                  _label('Thời hạn'),
+                  appDialogLabel('Thời hạn'),
                   GestureDetector(
                     onTap: () async {
                       final picked = await showDatePicker(
                         context: ctx,
                         initialDate: selDeadline ?? DateTime.now().add(const Duration(days: 7)),
-                        firstDate: DateTime.now(),
+                        firstDate: DateTime.now().subtract(const Duration(days: 365)),
                         lastDate: DateTime.now().add(const Duration(days: 365)),
                       );
-                      if (picked != null) {
-                        setDlg(() => selDeadline = picked);
-                      }
+                      if (picked != null) setDlg(() => selDeadline = picked);
                     },
                     child: Container(
                       width: double.infinity,
@@ -590,17 +307,22 @@ class _TasksScreenState extends State<TasksScreen> {
                         const Icon(Icons.calendar_today, size: 14, color: kTextMuted),
                         const SizedBox(width: 8),
                         Text(
-                          selDeadline != null ? _formatDate(selDeadline!) : 'Chọn ngày...',
-                          style: TextStyle(fontSize: 13,
-                              color: selDeadline != null ? kTextMain : kTextMuted),
+                          selDeadline != null
+                              ? formatDate(selDeadline!)
+                              : (isEdit && existing!.task.deadline.isNotEmpty ? existing!.task.deadline : 'Chọn ngày...'),
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: selDeadline != null || (isEdit && existing!.task.deadline.isNotEmpty)
+                                ? kTextMain
+                                : kTextMuted,
+                          ),
                         ),
                       ]),
                     ),
                   ),
                   const SizedBox(height: 14),
 
-                  // Cột (Status)
-                  _label('Cột'),
+                  appDialogLabel(isEdit ? 'Trạng thái' : 'Cột'),
                   Row(children: statuses.map((s) {
                     final active = selStatus == s.$1;
                     return GestureDetector(
@@ -611,8 +333,7 @@ class _TasksScreenState extends State<TasksScreen> {
                         decoration: BoxDecoration(
                           color: active ? _statusBg(s.$1) : kAppBg,
                           borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: active ? s.$3 : kBorder,
-                              width: active ? 1.5 : 0.5),
+                          border: Border.all(color: active ? s.$3 : kBorder, width: active ? 1.5 : 0.5),
                         ),
                         child: Text(s.$2,
                             style: TextStyle(fontSize: 12, color: active ? s.$3 : kTextMuted,
@@ -622,13 +343,12 @@ class _TasksScreenState extends State<TasksScreen> {
                   }).toList()),
                   const SizedBox(height: 14),
 
-                  // Giao cho — load from Firestore
-                  _label('Giao cho'),
+                  appDialogLabel('Giao cho'),
                   StreamBuilder<List<TeamMember>>(
                     stream: _firestoreService.watchMembers(selectedGroup.id),
                     builder: (context, snap) {
                       final members = snap.data ?? [];
-                      if (selAssignee.isEmpty && members.isNotEmpty) {
+                      if (!isEdit && selAssignee.isEmpty && members.isNotEmpty) {
                         selAssignee = members.first.initials;
                       }
                       return Wrap(
@@ -673,32 +393,38 @@ class _TasksScreenState extends State<TasksScreen> {
                 onPressed: () {
                   final title = titleCtrl.text.trim();
                   if (title.isEmpty) return;
-                  if (selDeadline == null) {
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                      content: Text('Vui lòng chọn thời hạn'),
-                      backgroundColor: kCoral,
-                      behavior: SnackBarBehavior.floating,
-                    ));
+
+                  if (!isEdit && selDeadline == null) {
+                    showAppSnackBar(context, 'Vui lòng chọn thời hạn', backgroundColor: kCoral);
                     return;
                   }
-                  final group = widget.groups[selGroupIndex];
-                  final deadlineStr = _formatDate(selDeadline!);
-                  _firestoreService.createTaskEverywhere(
-                    groupId: group.id,
-                    title: title,
-                    status: selStatus,
-                    assignee: selAssignee,
-                    deadline: deadlineStr,
-                  );
-                  Navigator.pop(ctx);
-                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                    content: Text('Đã thêm task "$title" vào ${group.name}'),
-                    backgroundColor: kTeal,
-                    behavior: SnackBarBehavior.floating,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                  ));
+
+                  if (isEdit) {
+                    final deadlineStr = selDeadline != null ? formatDate(selDeadline!) : null;
+                    _firestoreService.updateTask(
+                      existing!.groupId, existing.task.id,
+                      title: title != existing.task.title ? title : null,
+                      status: selStatus != existing.task.status ? selStatus : null,
+                      assignee: selAssignee != existing.task.assignee ? selAssignee : null,
+                      deadline: deadlineStr,
+                    );
+                    Navigator.pop(ctx);
+                    showAppSnackBar(context, 'Đã cập nhật task "$title"');
+                  } else {
+                    final group = widget.groups[selGroupIndex];
+                    final deadlineStr = formatDate(selDeadline!);
+                    _firestoreService.createTaskEverywhere(
+                      groupId: group.id,
+                      title: title,
+                      status: selStatus,
+                      assignee: selAssignee,
+                      deadline: deadlineStr,
+                    );
+                    Navigator.pop(ctx);
+                    showAppSnackBar(context, 'Đã thêm task "$title" vào ${group.name}');
+                  }
                 },
-                child: const Text('Thêm task'),
+                child: Text(isEdit ? 'Lưu' : 'Thêm task'),
               ),
             ],
           );
@@ -712,27 +438,8 @@ class _TasksScreenState extends State<TasksScreen> {
     'doing' => kAmberLight,
     _       => kAccentLight,
   };
-
-  Widget _label(String text) => Padding(
-    padding: const EdgeInsets.only(bottom: 8),
-    child: Text(text, style: const TextStyle(fontSize: 12, color: kTextMuted)),
-  );
-
-  InputDecoration _inputDeco(String hint) => InputDecoration(
-    hintText: hint,
-    hintStyle: const TextStyle(color: kTextMuted),
-    isDense: true, filled: true, fillColor: kAppBg,
-    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
-    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8),
-        borderSide: const BorderSide(color: kBorder, width: 0.5)),
-    enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8),
-        borderSide: const BorderSide(color: kBorder, width: 0.5)),
-    focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8),
-        borderSide: const BorderSide(color: kAccent)),
-  );
 }
 
-// ── Helper class for task + group name pairing ──────────────────────────────
 class _TaskWithGroup {
   final Task task;
   final String groupName;
@@ -740,110 +447,93 @@ class _TaskWithGroup {
   const _TaskWithGroup({required this.task, required this.groupName, required this.groupId});
 }
 
-// ── Desktop task row with optional group badge ──────────────────────────────
-class _DesktopTaskRow extends StatelessWidget {
+class _TaskItem extends StatelessWidget {
   final _TaskWithGroup tw;
+  final bool mobile;
   final bool showGroupBadge;
   final VoidCallback onToggle;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
 
-  const _DesktopTaskRow({required this.tw, required this.showGroupBadge, required this.onToggle, required this.onEdit, required this.onDelete});
+  const _TaskItem({
+    required this.tw,
+    required this.mobile,
+    required this.showGroupBadge,
+    required this.onToggle,
+    required this.onEdit,
+    required this.onDelete,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final t  = tw.task;
+    final t = tw.task;
     final st = statusStyle(t.status);
     final isDone = t.status == 'done';
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-      child: Row(children: [
-        // Toggle checkbox
-        GestureDetector(
-          onTap: onToggle,
-          child: Container(
-            width: 18, height: 18,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: isDone ? kTeal : Colors.transparent,
-              border: Border.all(color: isDone ? kTeal : kBorder, width: 1.5),
+    if (!mobile) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+        child: Row(children: [
+          GestureDetector(
+            onTap: onToggle,
+            child: Container(
+              width: 18, height: 18,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: isDone ? kTeal : Colors.transparent,
+                border: Border.all(color: isDone ? kTeal : kBorder, width: 1.5),
+              ),
+              child: isDone ? const Icon(Icons.check, size: 10, color: Colors.white) : null,
             ),
-            child: isDone ? const Icon(Icons.check, size: 10, color: Colors.white) : null,
           ),
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          flex: 5,
-          child: Text(t.title,
-              style: TextStyle(
-                fontSize: 13,
-                color: isDone ? kTextMuted : kTextMain,
-                decoration: isDone ? TextDecoration.lineThrough : null,
-              )),
-        ),
-        Expanded(
-          flex: 2,
-          child: AppBadge(label: st.label, bg: st.bg, fg: st.fg),
-        ),
-        Expanded(
-          flex: 2,
-          child: Text(t.deadline.isEmpty ? '--' : t.deadline,
-              style: TextStyle(fontSize: 12,
-                  color: t.deadline == 'Hôm nay' ? kCoral : kTextMuted)),
-        ),
-        Expanded(
-          flex: 2,
-          child: AppAvatar(initials: t.assignee, colorIndex: avatarIndex(t.assignee), size: 26),
-        ),
-        if (showGroupBadge)
+          const SizedBox(width: 10),
+          Expanded(
+            flex: 5,
+            child: Text(t.title,
+                style: TextStyle(
+                  fontSize: 13,
+                  color: isDone ? kTextMuted : kTextMain,
+                  decoration: isDone ? TextDecoration.lineThrough : null,
+                )),
+          ),
+          Expanded(flex: 2, child: AppBadge(label: st.label, bg: st.bg, fg: st.fg)),
           Expanded(
             flex: 2,
-            child: AppBadge(label: tw.groupName, bg: kAccentLight, fg: kAccent),
+            child: Text(t.deadline.isEmpty ? '--' : t.deadline,
+                style: TextStyle(fontSize: 12,
+                    color: t.deadline == 'Hôm nay' ? kCoral : kTextMuted)),
           ),
-        // Edit & Delete
-        SizedBox(
-          width: 60,
-          child: Row(mainAxisAlignment: MainAxisAlignment.end, children: [
-            InkWell(
-              onTap: onEdit,
-              borderRadius: BorderRadius.circular(4),
-              child: const Padding(
-                padding: EdgeInsets.all(4),
-                child: Icon(Icons.edit_outlined, size: 16, color: kTextMuted),
+          Expanded(
+            flex: 2,
+            child: AppAvatar(initials: t.assignee, colorIndex: avatarIndex(t.assignee), size: 26),
+          ),
+          if (showGroupBadge)
+            Expanded(flex: 2, child: AppBadge(label: tw.groupName, bg: kAccentLight, fg: kAccent)),
+          SizedBox(
+            width: 60,
+            child: Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+              InkWell(
+                onTap: onEdit,
+                borderRadius: BorderRadius.circular(4),
+                child: const Padding(
+                  padding: EdgeInsets.all(4),
+                  child: Icon(Icons.edit_outlined, size: 16, color: kTextMuted),
+                ),
               ),
-            ),
-            const SizedBox(width: 4),
-            InkWell(
-              onTap: onDelete,
-              borderRadius: BorderRadius.circular(4),
-              child: const Padding(
-                padding: EdgeInsets.all(4),
-                child: Icon(Icons.delete_outline, size: 16, color: kCoral),
+              const SizedBox(width: 4),
+              InkWell(
+                onTap: onDelete,
+                borderRadius: BorderRadius.circular(4),
+                child: const Padding(
+                  padding: EdgeInsets.all(4),
+                  child: Icon(Icons.delete_outline, size: 16, color: kCoral),
+                ),
               ),
-            ),
-          ]),
-        ),
-      ]),
-    );
-  }
-}
-
-// ── Mobile task card with optional group badge ──────────────────────────────
-class _MobileTaskCard extends StatelessWidget {
-  final _TaskWithGroup tw;
-  final bool showGroupBadge;
-  final VoidCallback onToggle;
-  final VoidCallback onEdit;
-  final VoidCallback onDelete;
-
-  const _MobileTaskCard({required this.tw, required this.showGroupBadge, required this.onToggle, required this.onEdit, required this.onDelete});
-
-  @override
-  Widget build(BuildContext context) {
-    final t  = tw.task;
-    final st = statusStyle(t.status);
-    final isDone = t.status == 'done';
+            ]),
+          ),
+        ]),
+      );
+    }
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -872,8 +562,7 @@ class _MobileTaskCard extends StatelessWidget {
             const SizedBox(height: 6),
             Wrap(spacing: 6, children: [
               AppBadge(label: st.label, bg: st.bg, fg: st.fg),
-              if (showGroupBadge)
-                AppBadge(label: tw.groupName, bg: kAccentLight, fg: kAccent),
+              if (showGroupBadge) AppBadge(label: tw.groupName, bg: kAccentLight, fg: kAccent),
             ]),
           ]),
         ),
@@ -885,7 +574,6 @@ class _MobileTaskCard extends StatelessWidget {
                   color: t.deadline == 'Hôm nay' ? kCoral : kTextMuted)),
         ]),
         const SizedBox(width: 8),
-        // Edit & Delete
         Column(mainAxisSize: MainAxisSize.min, children: [
           InkWell(
             onTap: onEdit,

@@ -6,6 +6,7 @@ import '../models.dart';
 import '../services/firestore_service.dart';
 import '../widgets/app_top_bar.dart';
 import '../widgets/group_widgets.dart';
+import '../widgets/shared_widgets.dart';
 import '../responsive.dart';
 
 class GroupsScreen extends StatefulWidget {
@@ -29,7 +30,6 @@ class GroupsScreen extends StatefulWidget {
 class _GroupsScreenState extends State<GroupsScreen> {
   final _firestoreService = FirestoreService();
 
-  // ── Tạo nhóm mới ──────────────────────────────────────────────────────────
   void _createGroup() {
     final nameCtrl = TextEditingController();
     final descCtrl = TextEditingController();
@@ -43,9 +43,18 @@ class _GroupsScreenState extends State<GroupsScreen> {
         content: SizedBox(
           width: 360,
           child: Column(mainAxisSize: MainAxisSize.min, children: [
-            _inputField(nameCtrl, 'Tên nhóm', 'VD: Team Backend Dev'),
+            TextField(
+              controller: nameCtrl,
+              style: const TextStyle(fontSize: 13, color: kTextMain),
+              decoration: appInputDecoration(labelText: 'Tên nhóm', hintText: 'VD: Team Backend Dev'),
+            ),
             const SizedBox(height: 10),
-            _inputField(descCtrl, 'Mô tả (tuỳ chọn)', 'Mô tả ngắn về nhóm...', maxLines: 2),
+            TextField(
+              controller: descCtrl,
+              maxLines: 2,
+              style: const TextStyle(fontSize: 13, color: kTextMain),
+              decoration: appInputDecoration(labelText: 'Mô tả (tuỳ chọn)', hintText: 'Mô tả ngắn về nhóm...'),
+            ),
           ]),
         ),
         actions: [
@@ -79,12 +88,7 @@ class _GroupsScreenState extends State<GroupsScreen> {
 
               if (ctx.mounted) Navigator.pop(ctx);
               if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                  content: Text('Đã tạo nhóm "$name" thành công! 🎉'),
-                  backgroundColor: kTeal,
-                  behavior: SnackBarBehavior.floating,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                ));
+                showAppSnackBar(context, 'Đã tạo nhóm "$name" thành công! 🎉');
               }
             },
             child: const Text('Tạo nhóm'),
@@ -94,7 +98,6 @@ class _GroupsScreenState extends State<GroupsScreen> {
     );
   }
 
-  // ── Mời thành viên ────────────────────────────────────────────────────────
   void _inviteMember() {
     final emailCtrl = TextEditingController();
     String selRole  = 'Thành viên';
@@ -108,9 +111,7 @@ class _GroupsScreenState extends State<GroupsScreen> {
           borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setSheet) => Padding(
-          padding: EdgeInsets.only(
-            bottom: MediaQuery.of(ctx).viewInsets.bottom,
-          ),
+          padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
           child: Column(mainAxisSize: MainAxisSize.min, children: [
             Container(
               margin: const EdgeInsets.only(top: 10, bottom: 6),
@@ -127,7 +128,6 @@ class _GroupsScreenState extends State<GroupsScreen> {
                     style: const TextStyle(fontSize: 12, color: kTextMuted)),
                 const SizedBox(height: 16),
 
-                // Danh sách thành viên hiện tại
                 StreamBuilder<List<TeamMember>>(
                   stream: _firestoreService.watchMembers(group.id),
                   builder: (context, snap) {
@@ -159,14 +159,16 @@ class _GroupsScreenState extends State<GroupsScreen> {
                 ),
                 const SizedBox(height: 14),
 
-                // Email input
-                const Text('Email thành viên mới',
-                    style: TextStyle(fontSize: 12, color: kTextMuted)),
+                const Text('Email thành viên mới', style: TextStyle(fontSize: 12, color: kTextMuted)),
                 const SizedBox(height: 6),
-                _inputField(emailCtrl, '', 'name@example.com', autofocus: true),
+                TextField(
+                  controller: emailCtrl,
+                  autofocus: true,
+                  style: const TextStyle(fontSize: 13, color: kTextMain),
+                  decoration: appInputDecoration(hintText: 'name@example.com'),
+                ),
                 const SizedBox(height: 12),
 
-                // Vai trò
                 const Text('Vai trò', style: TextStyle(fontSize: 12, color: kTextMuted)),
                 const SizedBox(height: 6),
                 Row(children: roles.map((r) {
@@ -203,30 +205,22 @@ class _GroupsScreenState extends State<GroupsScreen> {
                       final email = emailCtrl.text.trim();
                       if (email.isEmpty) return;
 
-                      // Tìm userId của người được mời
                       final invitedUserId = await _firestoreService.findUserIdByEmail(email);
 
                       if (invitedUserId == null) {
                         if (ctx.mounted) Navigator.pop(ctx);
                         if (mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                            content: Text('Không tìm thấy tài khoản với email "$email"'),
-                            backgroundColor: kCoral,
-                            behavior: SnackBarBehavior.floating,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                          ));
+                          showAppSnackBar(context, 'Không tìm thấy tài khoản với email "$email"', backgroundColor: kCoral);
                         }
                         return;
                       }
 
-                      // Lấy thông tin user được mời
                       final userDoc = await FirebaseFirestore.instance
                           .collection('users').doc(invitedUserId).get();
                       final userData = userDoc.data();
                       final memberName = userData?['name'] ?? email.split('@').first;
                       final initials = userData?['initials'] ?? email.substring(0, 2).toUpperCase();
 
-                      // Thêm vào subcollection members
                       final newMember = TeamMember(
                         name: memberName,
                         initials: initials,
@@ -235,11 +229,8 @@ class _GroupsScreenState extends State<GroupsScreen> {
                         avatarColorIndex: 3,
                       );
                       await _firestoreService.addMember(group.id, newMember);
-
-                      // Thêm userId vào memberIds để user thấy group
                       await _firestoreService.addMemberById(group.id, invitedUserId);
 
-                      // Add activity
                       final currentUser = FirebaseAuth.instance.currentUser;
                       await _firestoreService.addActivity(group.id, GroupActivity(
                         actor: currentUser?.displayName ?? 'User',
@@ -250,14 +241,7 @@ class _GroupsScreenState extends State<GroupsScreen> {
                       ));
 
                       if (ctx.mounted) Navigator.pop(ctx);
-                      if (mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                          content: Text('Đã thêm $memberName vào nhóm! ✅'),
-                          backgroundColor: kTeal,
-                          behavior: SnackBarBehavior.floating,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                        ));
-                      }
+                      if (mounted) showAppSnackBar(context, 'Đã thêm $memberName vào nhóm! ✅');
                     },
                     child: const Text('Gửi lời mời', style: TextStyle(fontWeight: FontWeight.w500)),
                   ),
@@ -270,7 +254,6 @@ class _GroupsScreenState extends State<GroupsScreen> {
     );
   }
 
-  // ── Xem chi tiết thành viên ───────────────────────────────────────────────
   void _viewMember(TeamMember member) {
     final group = widget.selectedGroup;
     showDialog(
@@ -304,14 +287,7 @@ class _GroupsScreenState extends State<GroupsScreen> {
               onPressed: () async {
                 await _firestoreService.removeMember(group.id, member.id);
                 if (ctx.mounted) Navigator.pop(ctx);
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                    content: Text('Đã xoá ${member.name} khỏi nhóm'),
-                    backgroundColor: kCoral,
-                    behavior: SnackBarBehavior.floating,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                  ));
-                }
+                if (mounted) showAppSnackBar(context, 'Đã xoá ${member.name} khỏi nhóm', backgroundColor: kCoral);
               },
               child: const Text('Xoá khỏi nhóm'),
             ),
@@ -325,31 +301,6 @@ class _GroupsScreenState extends State<GroupsScreen> {
     const SizedBox(width: 6),
     Text(text, style: const TextStyle(fontSize: 13, color: kTextMuted)),
   ]);
-
-  Widget _inputField(TextEditingController ctrl, String label, String hint,
-      {int maxLines = 1, bool autofocus = false}) =>
-      TextField(
-        controller: ctrl,
-        maxLines: maxLines,
-        autofocus: autofocus,
-        style: const TextStyle(fontSize: 13, color: kTextMain),
-        decoration: InputDecoration(
-          labelText: label.isNotEmpty ? label : null,
-          labelStyle: const TextStyle(fontSize: 12, color: kTextMuted),
-          hintText: hint,
-          hintStyle: const TextStyle(color: kTextMuted),
-          isDense: true,
-          filled: true,
-          fillColor: kAppBg,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8),
-              borderSide: const BorderSide(color: kBorder, width: 0.5)),
-          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8),
-              borderSide: const BorderSide(color: kBorder, width: 0.5)),
-          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8),
-              borderSide: const BorderSide(color: kAccent)),
-        ),
-      );
 
   @override
   Widget build(BuildContext context) {
@@ -448,10 +399,8 @@ class _GroupsScreenState extends State<GroupsScreen> {
           ),
         ]),
         const SizedBox(height: 6),
-        Text('${group.description}',
-            style: const TextStyle(fontSize: 12, color: kTextMuted)),
+        Text('${group.description}', style: const TextStyle(fontSize: 12, color: kTextMuted)),
         const SizedBox(height: 16),
-        // Members from Firestore
         StreamBuilder<List<TeamMember>>(
           stream: _firestoreService.watchMembers(group.id),
           builder: (context, snap) {
@@ -496,8 +445,7 @@ class _GroupsScreenState extends State<GroupsScreen> {
               return const Padding(
                 padding: EdgeInsets.symmetric(vertical: 16),
                 child: Center(
-                  child: Text('Chưa có hoạt động',
-                      style: TextStyle(fontSize: 12, color: kTextMuted)),
+                  child: Text('Chưa có hoạt động', style: TextStyle(fontSize: 12, color: kTextMuted)),
                 ),
               );
             }
@@ -514,30 +462,27 @@ class _GroupsScreenState extends State<GroupsScreen> {
         padding: const EdgeInsets.all(20),
         child: mobile
             ? ListView(children: [
-                // Mobile: dropdown chọn nhóm ở trên
-                _mobileGroupDropdown(),
-                const SizedBox(height: 16),
-                membersCard(),
-                const SizedBox(height: 16),
-                activityCard(),
-              ])
+          _mobileGroupDropdown(),
+          const SizedBox(height: 16),
+          membersCard(),
+          const SizedBox(height: 16),
+          activityCard(),
+        ])
             : Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                // Desktop: sidebar danh sách nhóm bên trái
-                SizedBox(width: 260, child: groupListSidebar()),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    membersCard(),
-                    const SizedBox(height: 16),
-                    activityCard(),
-                  ]),
-                ),
-              ]),
+          SizedBox(width: 260, child: groupListSidebar()),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              membersCard(),
+              const SizedBox(height: 16),
+              activityCard(),
+            ]),
+          ),
+        ]),
       ),
     );
   }
 
-  // ── Mobile group dropdown ─────────────────────────────────────────────────
   Widget _mobileGroupDropdown() => Container(
     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
     decoration: BoxDecoration(

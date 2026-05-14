@@ -4,6 +4,7 @@ import '../models.dart';
 import '../services/firestore_service.dart';
 import '../widgets/app_top_bar.dart';
 import '../widgets/dashboard_widgets.dart';
+import '../widgets/shared_widgets.dart';
 import '../responsive.dart';
 
 class DashboardScreen extends StatefulWidget {
@@ -27,7 +28,6 @@ class DashboardScreen extends StatefulWidget {
 class _DashboardScreenState extends State<DashboardScreen> {
   final _firestoreService = FirestoreService();
 
-  // ── Xem tất cả task ───────────────────────────────────────────────────────
   void _viewAllTasks() {
     showModalBottomSheet(
       context: context,
@@ -45,25 +45,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             final tasks = snapshot.data ?? [];
             return Column(
               children: [
-                Container(
-                  margin: const EdgeInsets.only(top: 10, bottom: 6),
-                  width: 36, height: 4,
-                  decoration: BoxDecoration(color: kBorder, borderRadius: BorderRadius.circular(2)),
-                ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
-                  child: Row(children: [
-                    Text('Tất cả công việc — ${widget.selectedGroup.name}',
-                        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: kTextMain)),
-                    const Spacer(),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                      decoration: BoxDecoration(color: kAccentLight, borderRadius: BorderRadius.circular(6)),
-                      child: Text('${tasks.length} tasks',
-                          style: const TextStyle(fontSize: 12, color: kAccent, fontWeight: FontWeight.w500)),
-                    ),
-                  ]),
-                ),
+                _sheetHeader(tasks.length),
                 const Divider(height: 0, color: kBorder, thickness: 0.5),
                 Expanded(
                   child: ListView.separated(
@@ -71,31 +53,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     padding: const EdgeInsets.all(16),
                     itemCount: tasks.length,
                     separatorBuilder: (_, __) => const Divider(height: 0, color: kBorder, thickness: 0.5),
-                    itemBuilder: (_, i) {
-                      final t  = tasks[i];
-                      final st = statusStyle(t.status);
-                      return Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        child: Row(children: [
-                          Expanded(
-                            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                              Text(t.title, style: const TextStyle(fontSize: 13, color: kTextMain)),
-                              const SizedBox(height: 6),
-                              Wrap(spacing: 6, children: [
-                                AppBadge(label: st.label, bg: st.bg, fg: st.fg),
-                              ]),
-                            ]),
-                          ),
-                          Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-                            AppAvatar(initials: t.assignee, colorIndex: avatarIndex(t.assignee), size: 24),
-                            const SizedBox(height: 4),
-                            Text(t.deadline,
-                                style: TextStyle(fontSize: 11,
-                                    color: t.deadline == 'Hôm nay' ? kCoral : kTextMuted)),
-                          ]),
-                        ]),
-                      );
-                    },
+                    itemBuilder: (_, i) => _taskRow(tasks[i]),
                   ),
                 ),
               ],
@@ -103,6 +61,46 @@ class _DashboardScreenState extends State<DashboardScreen> {
           },
         ),
       ),
+    );
+  }
+
+  Widget _sheetHeader(int count) => Padding(
+    padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+    child: Row(children: [
+      Text('Tất cả công việc — ${widget.selectedGroup.name}',
+          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: kTextMain)),
+      const Spacer(),
+      Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: BoxDecoration(color: kAccentLight, borderRadius: BorderRadius.circular(6)),
+        child: Text('$count tasks',
+            style: const TextStyle(fontSize: 12, color: kAccent, fontWeight: FontWeight.w500)),
+      ),
+    ]),
+  );
+
+  Widget _taskRow(Task t) {
+    final st = statusStyle(t.status);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      child: Row(children: [
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(t.title, style: const TextStyle(fontSize: 13, color: kTextMain)),
+            const SizedBox(height: 6),
+            Wrap(spacing: 6, children: [
+              AppBadge(label: st.label, bg: st.bg, fg: st.fg),
+            ]),
+          ]),
+        ),
+        Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+          AppAvatar(initials: t.assignee, colorIndex: avatarIndex(t.assignee), size: 24),
+          const SizedBox(height: 4),
+          Text(t.deadline,
+              style: TextStyle(fontSize: 11,
+                  color: t.deadline == 'Hôm nay' ? kCoral : kTextMuted)),
+        ]),
+      ]),
     );
   }
 
@@ -126,15 +124,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
           return SingleChildScrollView(
             padding: const EdgeInsets.all(20),
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              // ── Group selector ──────────────────────────────────────────────
-              _GroupSelector(
+              GroupSelector(
                 groups: widget.groups,
                 selectedIndex: widget.selectedGroupIndex,
                 onChanged: widget.onGroupChanged,
               ),
               const SizedBox(height: 16),
 
-              // ── Stat cards ─────────────────────────────────────────────────
               Wrap(
                 spacing: 12, runSpacing: 12,
                 children: [
@@ -163,7 +159,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
               const SizedBox(height: 16),
 
-              // ── Main content ──────────────────────────────────────────────
               if (mobile)
                 Column(children: [
                   AppCard(
@@ -221,7 +216,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  // ── Tổng quan các nhóm ────────────────────────────────────────────────────
   Widget _groupOverviewSection() {
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       const Text('Tổng quan các nhóm',
@@ -292,7 +286,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 }
 
-// ── Group Overview Card (with Firestore streams) ─────────────────────────────
 class _GroupOverviewCard extends StatelessWidget {
   final Group group;
   final bool isSelected;
@@ -340,7 +333,6 @@ class _GroupOverviewCard extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(fontSize: 11, color: kTextMuted)),
         const SizedBox(height: 10),
-        // Use streams for live task/member counts
         StreamBuilder<List<Task>>(
           stream: firestoreService.watchTasks(group.id, type: 'task'),
           builder: (context, taskSnap) {
@@ -370,58 +362,4 @@ class _GroupOverviewCard extends StatelessWidget {
       Text(text, style: const TextStyle(fontSize: 11, color: kTextMuted)),
     ],
   );
-}
-
-// ── Group Selector Widget ────────────────────────────────────────────────────
-
-class _GroupSelector extends StatelessWidget {
-  final List<Group> groups;
-  final int selectedIndex;
-  final ValueChanged<int> onChanged;
-
-  const _GroupSelector({required this.groups, required this.selectedIndex, required this.onChanged});
-
-  @override
-  Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(
-        children: groups.asMap().entries.map((entry) {
-          final i = entry.key;
-          final g = entry.value;
-          final active = i == selectedIndex;
-          return GestureDetector(
-            onTap: () => onChanged(i),
-            child: Container(
-              margin: const EdgeInsets.only(right: 8),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-              decoration: BoxDecoration(
-                color: active ? kAccentLight : kCardBg,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                  color: active ? kAccent : kBorder,
-                  width: active ? 1.5 : 0.5,
-                ),
-              ),
-              child: Row(mainAxisSize: MainAxisSize.min, children: [
-                Container(
-                  width: 8, height: 8,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: active ? kAccent : kTextMuted,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Text(g.name,
-                    style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: active ? FontWeight.w600 : FontWeight.normal,
-                        color: active ? kAccent : kTextMuted)),
-              ]),
-            ),
-          );
-        }).toList(),
-      ),
-    );
-  }
 }
