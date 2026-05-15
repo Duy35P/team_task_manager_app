@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../theme.dart';
 import '../models.dart';
 import '../services/firestore_service.dart';
 import '../widgets/app_top_bar.dart';
 import '../widgets/kanban_widgets.dart';
 import '../widgets/shared_widgets.dart';
-import '../responsive.dart';
+
 
 class KanbanScreen extends StatefulWidget {
   final List<Group> groups;
@@ -28,14 +29,22 @@ class KanbanScreen extends StatefulWidget {
 class _KanbanScreenState extends State<KanbanScreen> {
   final _firestoreService = FirestoreService();
 
+  String get _currentUserInitials {
+    final user = FirebaseAuth.instance.currentUser;
+    final name = user?.displayName ?? 'User';
+    final parts = name.trim().split(RegExp(r'\s+'));
+    if (parts.length >= 2) {
+      return '${parts[parts.length - 2][0]}${parts.last[0]}'.toUpperCase();
+    }
+    return parts.first.substring(0, parts.first.length.clamp(0, 2)).toUpperCase();
+  }
+
   void _move(Task task, String newStatus) {
     _firestoreService.updateTaskStatus(widget.selectedGroup.id, task.id, newStatus);
   }
 
   @override
   Widget build(BuildContext context) {
-    final mobile = isMobile(context);
-
     return Scaffold(
       backgroundColor: kAppBg,
       appBar: AppTopBar(title: 'Kanban Board'),
@@ -59,31 +68,15 @@ class _KanbanScreenState extends State<KanbanScreen> {
                 final tasks = snapshot.data ?? [];
                 List<Task> col(String s) => tasks.where((t) => t.status == s).toList();
 
-                if (mobile) {
-                  return ListView(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                    children: [
-                      KanbanColumn(title: 'Chờ làm',    status: 'todo',  color: kTextMuted, tasks: col('todo'),  onMove: _move),
-                      const SizedBox(height: 12),
-                      KanbanColumn(title: 'Đang làm',   status: 'doing', color: kAmber,     tasks: col('doing'), onMove: _move),
-                      const SizedBox(height: 12),
-                      KanbanColumn(title: 'Hoàn thành', status: 'done',  color: kTeal,      tasks: col('done'),  onMove: _move),
-                    ],
-                  );
-                }
-                return SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      KanbanColumn(title: 'Chờ làm',    status: 'todo',  color: kTextMuted, tasks: col('todo'),  onMove: _move, fixedWidth: 320),
-                      const SizedBox(width: 16),
-                      KanbanColumn(title: 'Đang làm',   status: 'doing', color: kAmber,     tasks: col('doing'), onMove: _move, fixedWidth: 320),
-                      const SizedBox(width: 16),
-                      KanbanColumn(title: 'Hoàn thành', status: 'done',  color: kTeal,      tasks: col('done'),  onMove: _move, fixedWidth: 320),
-                    ],
-                  ),
+                return ListView(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                  children: [
+                    KanbanColumn(title: 'Chờ làm',    status: 'todo',  color: kTextMuted, tasks: col('todo'),  onMove: _move, currentUserInitials: _currentUserInitials),
+                    const SizedBox(height: 12),
+                    KanbanColumn(title: 'Đang làm',   status: 'doing', color: kAmber,     tasks: col('doing'), onMove: _move, currentUserInitials: _currentUserInitials),
+                    const SizedBox(height: 12),
+                    KanbanColumn(title: 'Hoàn thành', status: 'done',  color: kTeal,      tasks: col('done'),  onMove: _move, currentUserInitials: _currentUserInitials),
+                  ],
                 );
               },
             ),

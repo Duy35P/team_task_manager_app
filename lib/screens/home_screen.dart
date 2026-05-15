@@ -11,7 +11,6 @@ import 'kanban_screen.dart';
 import 'groups_screen.dart';
 import 'timeline_screen.dart';
 import 'account_screen.dart';
-import '../responsive.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -71,16 +70,13 @@ class _MainAppState extends State<_MainApp> {
   int _index = 0;
   int _selectedGroupIndex = 0;
 
-  static const _navMain = [
+  static const _navItems = [
     NavItem(icon: Icons.grid_view_rounded,      label: 'Dashboard'),
     NavItem(icon: Icons.format_list_bulleted,   label: 'Công việc'),
     NavItem(icon: Icons.view_kanban_outlined,   label: 'Kanban'),
     NavItem(icon: Icons.group_outlined,         label: 'Nhóm'),
     NavItem(icon: Icons.calendar_today_outlined, label: 'Timeline'),
-  ];
-
-  static const _navSettings = [
-    NavItem(icon: Icons.person_outline, label: 'Tài khoản'),
+    NavItem(icon: Icons.person_outline,         label: 'Tài khoản'),
   ];
 
   @override
@@ -107,85 +103,64 @@ class _MainAppState extends State<_MainApp> {
 
         final selectedGroup = groups.isEmpty ? null : groups[safeIndex];
 
-        return _buildMainScaffold(groups, selectedGroup, safeIndex);
+        // Nếu chưa có group, tạo group rỗng để các màn hình không lỗi
+        final group = selectedGroup ?? Group(
+          id: '', name: '', members: [], tasks: [], kanbanTasks: [], activities: [],
+        );
+
+        Widget currentPage() => switch (_index) {
+          0 => DashboardScreen(
+            groups: groups,
+            selectedGroup: group,
+            selectedGroupIndex: safeIndex,
+            onGroupChanged: (i) => setState(() => _selectedGroupIndex = i),
+          ),
+          1 => TasksScreen(
+            groups: groups,
+            selectedGroup: group,
+            selectedGroupIndex: safeIndex,
+            onGroupChanged: (i) => setState(() => _selectedGroupIndex = i),
+          ),
+          2 => KanbanScreen(
+            groups: groups,
+            selectedGroup: group,
+            selectedGroupIndex: safeIndex,
+            onGroupChanged: (i) => setState(() => _selectedGroupIndex = i),
+          ),
+          3 => GroupsScreen(
+            groups: groups,
+            selectedGroup: group,
+            selectedGroupIndex: safeIndex,
+            onGroupChanged: (i) => setState(() => _selectedGroupIndex = i),
+          ),
+          4 => TimelineScreen(
+            groups: groups,
+            selectedGroup: group,
+            selectedGroupIndex: safeIndex,
+            onGroupChanged: (i) => setState(() => _selectedGroupIndex = i),
+          ),
+          5 => const AccountScreen(),
+          _ => DashboardScreen(
+            groups: groups,
+            selectedGroup: group,
+            selectedGroupIndex: safeIndex,
+            onGroupChanged: (i) => setState(() => _selectedGroupIndex = i),
+          ),
+        };
+
+        return Scaffold(
+          resizeToAvoidBottomInset: false,
+          bottomNavigationBar: BottomNavigationBar(
+            currentIndex: _index.clamp(0, _navItems.length - 1),
+            onTap: (i) => setState(() => _index = i),
+            items: _navItems
+                .map((e) => BottomNavigationBarItem(icon: Icon(e.icon), label: e.label))
+                .toList(),
+            type: BottomNavigationBarType.fixed,
+          ),
+          body: currentPage(),
+        );
       },
     );
   }
-
-  Widget _buildMainScaffold(List<Group> groups, Group? selectedGroup, int selectedIndex) {
-    final mobile = isMobile(context);
-    final navItems = [..._navMain, ..._navSettings];
-
-    // Nếu chưa có group, tạo group rỗng để các màn hình không lỗi
-    final group = selectedGroup ?? Group(
-      id: '', name: '', members: [], tasks: [], kanbanTasks: [], activities: [],
-    );
-
-    Widget currentPage() => switch (_index) {
-      0 => DashboardScreen(
-        groups: groups,
-        selectedGroup: group,
-        selectedGroupIndex: selectedIndex,
-        onGroupChanged: (i) => setState(() => _selectedGroupIndex = i),
-      ),
-      1 => TasksScreen(
-        groups: groups,
-        selectedGroup: group,
-        selectedGroupIndex: selectedIndex,
-        onGroupChanged: (i) => setState(() => _selectedGroupIndex = i),
-      ),
-      2 => KanbanScreen(
-        groups: groups,
-        selectedGroup: group,
-        selectedGroupIndex: selectedIndex,
-        onGroupChanged: (i) => setState(() => _selectedGroupIndex = i),
-      ),
-      3 => GroupsScreen(
-        groups: groups,
-        selectedGroup: group,
-        selectedGroupIndex: selectedIndex,
-        onGroupChanged: (i) => setState(() => _selectedGroupIndex = i),
-      ),
-      4 => TimelineScreen(
-        groups: groups,
-        selectedGroup: group,
-        selectedGroupIndex: selectedIndex,
-        onGroupChanged: (i) => setState(() => _selectedGroupIndex = i),
-      ),
-      5 => const AccountScreen(),
-      _ => DashboardScreen(
-        groups: groups,
-        selectedGroup: group,
-        selectedGroupIndex: selectedIndex,
-        onGroupChanged: (i) => setState(() => _selectedGroupIndex = i),
-      ),
-    };
-
-    return Scaffold(
-      resizeToAvoidBottomInset: false,
-      bottomNavigationBar: mobile
-          ? BottomNavigationBar(
-        currentIndex: _index.clamp(0, navItems.length - 1),
-        onTap: (i) => setState(() => _index = i),
-        items: navItems
-            .map((e) => BottomNavigationBarItem(icon: Icon(e.icon), label: e.label))
-            .toList(),
-        type: BottomNavigationBarType.fixed,
-      )
-          : null,
-      body: Row(
-        children: [
-          if (!mobile)
-            Sidebar(
-              index: _index,
-              mainItems: _navMain,
-              settingsItems: _navSettings,
-              onSelect: (i) => setState(() => _index = i),
-            ),
-          Expanded(child: currentPage()),
-        ],
-      ),
-    );
-  }
-
 }

@@ -84,6 +84,7 @@ class TimelineItem {
 
 class TeamMember {
   final String id;
+  final String userId; // Firebase Auth UID của thành viên
   final String name;
   final String initials;
   final String role;
@@ -91,6 +92,7 @@ class TeamMember {
   final int avatarColorIndex; // 0=purple 1=teal 2=coral
   TeamMember({
     this.id = '',
+    this.userId = '',
     required this.name,
     required this.initials,
     required this.role,
@@ -99,6 +101,7 @@ class TeamMember {
   });
 
   Map<String, dynamic> toMap() => {
+    'userId': userId,
     'name': name,
     'initials': initials,
     'role': role,
@@ -108,6 +111,7 @@ class TeamMember {
 
   factory TeamMember.fromMap(String id, Map<String, dynamic> map) => TeamMember(
     id: id,
+    userId: map['userId'] ?? '',
     name: map['name'] ?? '',
     initials: map['initials'] ?? '',
     role: map['role'] ?? 'Thành viên',

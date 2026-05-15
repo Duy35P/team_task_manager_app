@@ -167,7 +167,7 @@ Firestore Database
 │   │   ├── type: string (task|kanban) // phân biệt task vs kanban task
 │   │   └── createdAt: timestamp
 │   │
-│   ├── messages/{messageId} ← subcollection
+│   ├── messages/{messageId} ← subcollection  // đã bỏ khỏi giao diện app
 │   │   ├── sender: string
 │   │   ├── text: string
 │   │   ├── channel: string

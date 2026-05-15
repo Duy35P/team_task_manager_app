@@ -62,20 +62,6 @@ class Sidebar extends StatelessWidget {
           )),
 
           const Spacer(),
-          Container(height: 0.5, color: Colors.white.withOpacity(0.07)),
-          // User row
-          Padding(
-            padding: const EdgeInsets.all(8),
-            child: Row(children: [
-              const AppAvatar(initials: 'MH', colorIndex: 0, size: 32),
-              const SizedBox(width: 9),
-              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                const Text('Minh Hoàng',
-                    style: TextStyle(color: Color(0xFFD8D8E8), fontSize: 12, fontWeight: FontWeight.w500)),
-                Text('Admin', style: TextStyle(color: kSidebarText.withOpacity(0.45), fontSize: 11)),
-              ]),
-            ]),
-          ),
         ],
       ),
     );

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../theme.dart';
-import '../responsive.dart';
 
 // ── Top bar (reused by each screen) ──────────────────────────────────────────
 
@@ -16,8 +15,6 @@ class AppTopBar extends StatelessWidget implements PreferredSizeWidget {
 
   @override
   Widget build(BuildContext context) {
-    final compact = isCompactBar(context);
-
     return Container(
       height: 52,
       decoration: const BoxDecoration(
@@ -29,23 +26,7 @@ class AppTopBar extends StatelessWidget implements PreferredSizeWidget {
         Text(title,
             style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500, color: kTextMain)),
         const Spacer(),
-        if (!compact)
-          Container(
-            width: 160, height: 30,
-            decoration: BoxDecoration(
-              color: kAppBg,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: kBorder, width: 0.5),
-            ),
-            padding: const EdgeInsets.symmetric(horizontal: 10),
-            child: const Row(children: [
-              Icon(Icons.search, size: 14, color: kTextMuted),
-              SizedBox(width: 6),
-              Text('Tìm kiếm...', style: TextStyle(fontSize: 12, color: kTextMuted)),
-            ]),
-          ),
-        if (actionLabel != null) ...[
-          const SizedBox(width: 10),
+        if (actionLabel != null)
           GestureDetector(
             onTap: onAction,
             child: Container(
@@ -57,7 +38,6 @@ class AppTopBar extends StatelessWidget implements PreferredSizeWidget {
               ),
             ),
           ),
-        ],
       ]),
     );
   }

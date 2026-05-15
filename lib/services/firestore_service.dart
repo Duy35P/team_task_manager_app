@@ -32,6 +32,7 @@ class FirestoreService {
     final initials = userData?['initials'] ?? 'U';
 
     await ref.collection('members').add(TeamMember(
+      userId: userId,
       name: name,
       initials: initials,
       role: 'Admin',
@@ -58,6 +59,7 @@ class FirestoreService {
 
   /// Lấy stream tasks của group (lọc theo type nếu cần)
   Stream<List<Task>> watchTasks(String groupId, {String? type}) {
+    if (groupId.isEmpty) return Stream.value([]);
     Query<Map<String, dynamic>> query = _db
         .collection('groups').doc(groupId)
         .collection('tasks');
@@ -154,7 +156,7 @@ class FirestoreService {
       await d.reference.update({'status': status});
     }
 
-    // 3. Cập nhật timeline item (tìm theo taskId)
+    // 3. Cập nhật timeline item (tìm theo taskId hoặc title)
     final statusLabel = switch (status) {
       'done'  => 'Hoàn thành',
       'doing' => 'Đang làm',
@@ -166,7 +168,11 @@ class FirestoreService {
       _       => 0xFF7B61FF,
     };
     final tlCol = _db.collection('groups').doc(groupId).collection('timeline');
-    final tlSnap = await tlCol.where('taskId', isEqualTo: taskId).get();
+    var tlSnap = await tlCol.where('taskId', isEqualTo: taskId).get();
+    // Fallback: tìm theo title nếu taskId không khớp (VD: kanban task ID khác task ID)
+    if (tlSnap.docs.isEmpty && title.isNotEmpty) {
+      tlSnap = await tlCol.where('title', isEqualTo: title).get();
+    }
     for (final d in tlSnap.docs) {
       await d.reference.update({'label': statusLabel, 'colorValue': statusColor});
     }
@@ -208,7 +214,10 @@ class FirestoreService {
 
     // Cập nhật timeline nếu title thay đổi hoặc status thay đổi
     final tlCol = _db.collection('groups').doc(groupId).collection('timeline');
-    final tlSnap = await tlCol.where('taskId', isEqualTo: taskId).get();
+    var tlSnap = await tlCol.where('taskId', isEqualTo: taskId).get();
+    if (tlSnap.docs.isEmpty && oldTitle.isNotEmpty) {
+      tlSnap = await tlCol.where('title', isEqualTo: oldTitle).get();
+    }
     if (tlSnap.docs.isNotEmpty) {
       final tlUpdates = <String, dynamic>{};
       if (title != null) tlUpdates['title'] = title;
@@ -264,7 +273,10 @@ class FirestoreService {
 
     // Xóa timeline item
     final tlCol = _db.collection('groups').doc(groupId).collection('timeline');
-    final tlSnap = await tlCol.where('taskId', isEqualTo: taskId).get();
+    var tlSnap = await tlCol.where('taskId', isEqualTo: taskId).get();
+    if (tlSnap.docs.isEmpty && title.isNotEmpty) {
+      tlSnap = await tlCol.where('title', isEqualTo: title).get();
+    }
     for (final d in tlSnap.docs) {
       await d.reference.delete();
     }
@@ -274,6 +286,7 @@ class FirestoreService {
   // ── TIMELINE ────────────────────────────────────────────────────────────
   // ══════════════════════════════════════════════════════════════════════════
   Stream<List<TimelineItem>> watchTimeline(String groupId) {
+    if (groupId.isEmpty) return Stream.value([]);
     return _db.collection('groups').doc(groupId)
         .collection('timeline')
         .snapshots()
@@ -300,6 +313,7 @@ class FirestoreService {
 
   /// Lấy stream thành viên nhóm
   Stream<List<TeamMember>> watchMembers(String groupId) {
+    if (groupId.isEmpty) return Stream.value([]);
     return _db.collection('groups').doc(groupId)
         .collection('members').snapshots().map((snap) =>
       snap.docs.map((doc) => TeamMember.fromMap(doc.id, doc.data())).toList(),
@@ -312,10 +326,23 @@ class FirestoreService {
         .collection('members').add(member.toMap());
   }
 
-  /// Xóa thành viên
+  /// Xóa thành viên (xóa khỏi subcollection members VÀ khỏi memberIds)
   Future<void> removeMember(String groupId, String memberId) async {
+    // Đọc member doc để lấy userId trước khi xóa
+    final memberDoc = await _db.collection('groups').doc(groupId)
+        .collection('members').doc(memberId).get();
+    final memberUserId = memberDoc.data()?['userId'] as String? ?? '';
+
+    // Xóa khỏi subcollection members
     await _db.collection('groups').doc(groupId)
         .collection('members').doc(memberId).delete();
+
+    // Xóa userId khỏi memberIds array để user không còn thấy group
+    if (memberUserId.isNotEmpty) {
+      await _db.collection('groups').doc(groupId).update({
+        'memberIds': FieldValue.arrayRemove([memberUserId]),
+      });
+    }
   }
 
   /// Thêm userId vào memberIds của group (để user thấy group)
@@ -343,6 +370,7 @@ class FirestoreService {
 
   /// Lấy stream hoạt động nhóm
   Stream<List<GroupActivity>> watchActivities(String groupId) {
+    if (groupId.isEmpty) return Stream.value([]);
     return _db.collection('groups').doc(groupId)
         .collection('activities')
         .snapshots().map((snap) {

@@ -5,7 +5,6 @@ import '../services/firestore_service.dart';
 import '../widgets/app_top_bar.dart';
 import '../widgets/dashboard_widgets.dart';
 import '../widgets/shared_widgets.dart';
-import '../responsive.dart';
 
 class DashboardScreen extends StatefulWidget {
   final List<Group> groups;
@@ -106,9 +105,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final mobile = isMobile(context);
-    final width  = MediaQuery.of(context).size.width;
-    final group  = widget.selectedGroup;
+    final width = MediaQuery.of(context).size.width;
+    final group = widget.selectedGroup;
 
     return Scaffold(
       backgroundColor: kAppBg,
@@ -135,23 +133,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 spacing: 12, runSpacing: 12,
                 children: [
                   SizedBox(
-                    width: mobile ? width - 40 : 200,
+                    width: width - 40,
                     child: StatCard(num: '${tasks.length}', label: 'Tổng công việc',
                         badge: group.name,
                         badgeBg: kAccentLight, badgeFg: kAccent),
                   ),
                   SizedBox(
-                    width: mobile ? width - 40 : 200,
+                    width: width - 40,
                     child: StatCard(num: '$doing', label: 'Đang thực hiện',
                         badge: 'Cần chú ý', badgeBg: kAmberLight, badgeFg: kAmber),
                   ),
                   SizedBox(
-                    width: mobile ? width - 40 : 200,
+                    width: width - 40,
                     child: StatCard(num: '$done', label: 'Hoàn thành',
-                        badge: '+2 hôm nay', badgeBg: kTealLight, badgeFg: kTeal),
+                        badge: '${tasks.isEmpty ? 0 : (done * 100 ~/ tasks.length)}%', badgeBg: kTealLight, badgeFg: kTeal),
                   ),
                   SizedBox(
-                    width: mobile ? width - 40 : 200,
+                    width: width - 40,
                     child: StatCard(num: '$overdue', label: 'Quá hạn',
                         badge: 'Cần xử lý', badgeBg: kCoralLight, badgeFg: kCoral),
                   ),
@@ -159,56 +157,26 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
               const SizedBox(height: 16),
 
-              if (mobile)
-                Column(children: [
-                  AppCard(
-                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Row(children: [
-                        const Text('Việc gần đây',
-                            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: kTextMain)),
-                        const Spacer(),
-                        GestureDetector(
-                          onTap: _viewAllTasks,
-                          child: Text('Xem tất cả (${tasks.length})',
-                              style: const TextStyle(fontSize: 12, color: kAccent, fontWeight: FontWeight.w500)),
-                        ),
-                      ]),
-                      const SizedBox(height: 12),
-                      ...tasks.take(4).map((t) => DashboardTaskRow(task: t)),
-                    ]),
-                  ),
-                  const SizedBox(height: 16),
-                  AppCard(child: _progressPanel(tasks)),
-                  const SizedBox(height: 16),
-                  _groupOverviewSection(),
-                ])
-              else
-                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Expanded(
-                      child: AppCard(
-                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                          Row(children: [
-                            const Text('Việc gần đây',
-                                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: kTextMain)),
-                            const Spacer(),
-                            GestureDetector(
-                              onTap: _viewAllTasks,
-                              child: Text('Xem tất cả (${tasks.length})',
-                                  style: const TextStyle(fontSize: 12, color: kAccent, fontWeight: FontWeight.w500)),
-                            ),
-                          ]),
-                          const SizedBox(height: 12),
-                          ...tasks.take(4).map((t) => DashboardTaskRow(task: t)),
-                        ]),
-                      ),
+              AppCard(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Row(children: [
+                    const Text('Việc gần đây',
+                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: kTextMain)),
+                    const Spacer(),
+                    GestureDetector(
+                      onTap: _viewAllTasks,
+                      child: Text('Xem tất cả (${tasks.length})',
+                          style: const TextStyle(fontSize: 12, color: kAccent, fontWeight: FontWeight.w500)),
                     ),
-                    const SizedBox(width: 16),
-                    SizedBox(width: 320, child: AppCard(child: _progressPanel(tasks))),
                   ]),
-                  const SizedBox(height: 16),
-                  _groupOverviewSection(),
+                  const SizedBox(height: 12),
+                  ...tasks.take(4).map((t) => DashboardTaskRow(task: t)),
                 ]),
+              ),
+              const SizedBox(height: 16),
+              AppCard(child: _progressPanel(tasks)),
+              const SizedBox(height: 16),
+              _groupOverviewSection(),
             ]),
           );
         },
@@ -300,7 +268,7 @@ class _GroupOverviewCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 220,
+      width: MediaQuery.of(context).size.width - 40,
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: kCardBg,

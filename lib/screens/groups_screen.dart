@@ -7,7 +7,6 @@ import '../services/firestore_service.dart';
 import '../widgets/app_top_bar.dart';
 import '../widgets/group_widgets.dart';
 import '../widgets/shared_widgets.dart';
-import '../responsive.dart';
 
 class GroupsScreen extends StatefulWidget {
   final List<Group> groups;
@@ -222,6 +221,7 @@ class _GroupsScreenState extends State<GroupsScreen> {
                       final initials = userData?['initials'] ?? email.substring(0, 2).toUpperCase();
 
                       final newMember = TeamMember(
+                        userId: invitedUserId,
                         name: memberName,
                         initials: initials,
                         role: selRole,
@@ -230,15 +230,6 @@ class _GroupsScreenState extends State<GroupsScreen> {
                       );
                       await _firestoreService.addMember(group.id, newMember);
                       await _firestoreService.addMemberById(group.id, invitedUserId);
-
-                      final currentUser = FirebaseAuth.instance.currentUser;
-                      await _firestoreService.addActivity(group.id, GroupActivity(
-                        actor: currentUser?.displayName ?? 'User',
-                        action: 'đã mời',
-                        detail: memberName,
-                        time: 'Vừa xong',
-                        colorIndex: 0,
-                      ));
 
                       if (ctx.mounted) Navigator.pop(ctx);
                       if (mounted) showAppSnackBar(context, 'Đã thêm $memberName vào nhóm! ✅');
@@ -285,9 +276,16 @@ class _GroupsScreenState extends State<GroupsScreen> {
                 elevation: 0, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
               ),
               onPressed: () async {
-                await _firestoreService.removeMember(group.id, member.id);
-                if (ctx.mounted) Navigator.pop(ctx);
-                if (mounted) showAppSnackBar(context, 'Đã xoá ${member.name} khỏi nhóm', backgroundColor: kCoral);
+                final memberName = member.name;
+                final memberId = member.id;
+                final groupId = group.id;
+                Navigator.pop(ctx);
+                try {
+                  await _firestoreService.removeMember(groupId, memberId);
+                  if (mounted) showAppSnackBar(context, 'Đã xoá $memberName khỏi nhóm', backgroundColor: kCoral);
+                } catch (e) {
+                  if (mounted) showAppSnackBar(context, 'Lỗi khi xoá thành viên: $e', backgroundColor: kCoral);
+                }
               },
               child: const Text('Xoá khỏi nhóm'),
             ),
@@ -304,220 +302,69 @@ class _GroupsScreenState extends State<GroupsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final mobile = isMobile(context);
-    final group  = widget.selectedGroup;
-
-    Widget groupListSidebar() => AppCard(
-      padding: EdgeInsets.zero,
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(14, 14, 14, 10),
-          child: Row(children: [
-            const Text('Nhóm của tôi',
-                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: kTextMain)),
-            const Spacer(),
-            GestureDetector(
-              onTap: _createGroup,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(color: kAccent, borderRadius: BorderRadius.circular(6)),
-                child: const Text('+ Tạo',
-                    style: TextStyle(fontSize: 11, color: Colors.white, fontWeight: FontWeight.w500)),
-              ),
-            ),
-          ]),
-        ),
-        const Divider(height: 0, color: kBorder, thickness: 0.5),
-        Padding(
-          padding: const EdgeInsets.all(8),
-          child: Column(
-            children: widget.groups.asMap().entries.map((entry) {
-              final i = entry.key;
-              final g = entry.value;
-              final active = i == widget.selectedGroupIndex;
-              return GestureDetector(
-                onTap: () => widget.onGroupChanged(i),
-                child: Container(
-                  margin: const EdgeInsets.only(bottom: 2),
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                  decoration: BoxDecoration(
-                    color: active ? kAccentLight : Colors.transparent,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Row(children: [
-                    Container(
-                      width: 32, height: 32,
-                      decoration: BoxDecoration(
-                        color: active ? kAccent : kAppBg,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Center(
-                        child: Text(
-                          g.name.split(' ').last.substring(0, 1).toUpperCase(),
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            color: active ? Colors.white : kTextMuted,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                        Text(g.name,
-                            style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: active ? FontWeight.w600 : FontWeight.normal,
-                                color: active ? kAccent : kTextMain)),
-                        Text(g.description.isNotEmpty ? g.description : 'Nhóm',
-                            style: const TextStyle(fontSize: 11, color: kTextMuted)),
-                      ]),
-                    ),
-                    if (active)
-                      const Icon(Icons.check_circle, color: kAccent, size: 16),
-                  ]),
-                ),
-              );
-            }).toList(),
-          ),
-        ),
-      ]),
-    );
-
-    Widget membersCard() => AppCard(
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [
-          Expanded(
-            child: Text(group.name,
-                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: kTextMain)),
-          ),
-          AppBadge(
-            label: group.isActive ? 'Hoạt động' : 'Tạm dừng',
-            bg: group.isActive ? kTealLight : kAppBg,
-            fg: group.isActive ? kTeal : kTextMuted,
-          ),
-        ]),
-        const SizedBox(height: 6),
-        Text('${group.description}', style: const TextStyle(fontSize: 12, color: kTextMuted)),
-        const SizedBox(height: 16),
-        StreamBuilder<List<TeamMember>>(
-          stream: _firestoreService.watchMembers(group.id),
-          builder: (context, snap) {
-            final members = snap.data ?? [];
-            return Column(children: [
-              ...members.map((m) => GestureDetector(
-                onTap: () => _viewMember(m),
-                child: MemberRow(member: m),
-              )),
-              const SizedBox(height: 8),
-              GestureDetector(
-                onTap: _inviteMember,
-                child: Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: kBorder, width: 0.5),
-                  ),
-                  child: const Center(
-                    child: Text('+ Mời thành viên',
-                        style: TextStyle(fontSize: 13, color: kTextMuted, fontWeight: FontWeight.w500)),
-                  ),
-                ),
-              ),
-            ]);
-          },
-        ),
-      ]),
-    );
-
-    Widget activityCard() => AppCard(
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        const Text('Hoạt động nhóm',
-            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: kTextMain)),
-        const SizedBox(height: 14),
-        StreamBuilder<List<GroupActivity>>(
-          stream: _firestoreService.watchActivities(group.id),
-          builder: (context, snap) {
-            final activities = snap.data ?? [];
-            if (activities.isEmpty) {
-              return const Padding(
-                padding: EdgeInsets.symmetric(vertical: 16),
-                child: Center(
-                  child: Text('Chưa có hoạt động', style: TextStyle(fontSize: 12, color: kTextMuted)),
-                ),
-              );
-            }
-            return Column(children: activities.map((a) => ActivityRow(activity: a)).toList());
-          },
-        ),
-      ]),
-    );
+    final group = widget.selectedGroup;
 
     return Scaffold(
       backgroundColor: kAppBg,
       appBar: AppTopBar(title: 'Nhóm của tôi', actionLabel: '+ Tạo nhóm', onAction: _createGroup),
       body: Padding(
         padding: const EdgeInsets.all(20),
-        child: mobile
-            ? ListView(children: [
-          _mobileGroupDropdown(),
+        child: ListView(children: [
+          GroupSelector(
+            groups: widget.groups,
+            selectedIndex: widget.selectedGroupIndex,
+            onChanged: widget.onGroupChanged,
+          ),
           const SizedBox(height: 16),
-          membersCard(),
-          const SizedBox(height: 16),
-          activityCard(),
-        ])
-            : Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          SizedBox(width: 260, child: groupListSidebar()),
-          const SizedBox(width: 16),
-          Expanded(
+          // Members card
+          AppCard(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              membersCard(),
+              Row(children: [
+                Expanded(
+                  child: Text(group.name,
+                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: kTextMain)),
+                ),
+                AppBadge(
+                  label: group.isActive ? 'Hoạt động' : 'Tạm dừng',
+                  bg: group.isActive ? kTealLight : kAppBg,
+                  fg: group.isActive ? kTeal : kTextMuted,
+                ),
+              ]),
+              const SizedBox(height: 6),
+              Text(group.description, style: const TextStyle(fontSize: 12, color: kTextMuted)),
               const SizedBox(height: 16),
-              activityCard(),
+              StreamBuilder<List<TeamMember>>(
+                stream: _firestoreService.watchMembers(group.id),
+                builder: (context, snap) {
+                  final members = snap.data ?? [];
+                  return Column(children: [
+                    ...members.map((m) => GestureDetector(
+                      onTap: () => _viewMember(m),
+                      child: MemberRow(member: m),
+                    )),
+                    const SizedBox(height: 8),
+                    GestureDetector(
+                      onTap: _inviteMember,
+                      child: Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: kBorder, width: 0.5),
+                        ),
+                        child: const Center(
+                          child: Text('+ Mời thành viên',
+                              style: TextStyle(fontSize: 13, color: kTextMuted, fontWeight: FontWeight.w500)),
+                        ),
+                      ),
+                    ),
+                  ]);
+                },
+              ),
             ]),
           ),
         ]),
       ),
     );
   }
-
-  Widget _mobileGroupDropdown() => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-    decoration: BoxDecoration(
-      color: kCardBg,
-      borderRadius: BorderRadius.circular(10),
-      border: Border.all(color: kBorder, width: 0.5),
-    ),
-    child: DropdownButtonHideUnderline(
-      child: DropdownButton<int>(
-        isExpanded: true,
-        value: widget.selectedGroupIndex,
-        icon: const Icon(Icons.expand_more, color: kTextMuted, size: 20),
-        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: kTextMain),
-        items: widget.groups.asMap().entries.map((entry) {
-          final i = entry.key;
-          final g = entry.value;
-          return DropdownMenuItem<int>(
-            value: i,
-            child: Row(children: [
-              Container(
-                width: 8, height: 8,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: g.isActive ? kTeal : kTextMuted,
-                ),
-              ),
-              const SizedBox(width: 10),
-              Text(g.name),
-            ]),
-          );
-        }).toList(),
-        onChanged: (i) {
-          if (i != null) widget.onGroupChanged(i);
-        },
-      ),
-    ),
-  );
 }

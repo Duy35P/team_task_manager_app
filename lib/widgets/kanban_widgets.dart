@@ -9,44 +9,36 @@ class KanbanColumn extends StatelessWidget {
   final Color color;
   final List<Task> tasks;
   final void Function(Task, String) onMove;
-  final double? fixedWidth;
+  final String currentUserInitials;
   const KanbanColumn({
     super.key,
     required this.title, required this.status, required this.color,
-    required this.tasks, required this.onMove, this.fixedWidth,
+    required this.tasks, required this.onMove, required this.currentUserInitials,
   });
 
   @override
   Widget build(BuildContext context) {
-    return DragTarget<Task>(
-      onAcceptWithDetails: (d) => onMove(d.data, status),
-      builder: (_, candidates, __) => AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        width: fixedWidth ?? double.infinity,
-        constraints: fixedWidth != null ? BoxConstraints(maxWidth: fixedWidth!) : null,
-        decoration: BoxDecoration(
-          color: candidates.isNotEmpty ? kAccentLight : kCardBg,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-              color: candidates.isNotEmpty ? kAccent : kBorder,
-              width: candidates.isNotEmpty ? 1.5 : 0.5),
-        ),
-        padding: const EdgeInsets.all(14),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(children: [
-            Flexible(child: Text(title,
-                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: color))),
-            const SizedBox(width: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-              decoration: BoxDecoration(color: kAppBg, borderRadius: BorderRadius.circular(10)),
-              child: Text('${tasks.length}', style: const TextStyle(fontSize: 11, color: kTextMuted)),
-            ),
-          ]),
-          const SizedBox(height: 12),
-          ...tasks.map((t) => KanbanCard(key: ValueKey(t.id), task: t)),
-        ]),
+    return Container(
+      decoration: BoxDecoration(
+        color: kCardBg,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: kBorder, width: 0.5),
       ),
+      padding: const EdgeInsets.all(14),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Flexible(child: Text(title,
+              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: color))),
+          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            decoration: BoxDecoration(color: kAppBg, borderRadius: BorderRadius.circular(10)),
+            child: Text('${tasks.length}', style: const TextStyle(fontSize: 11, color: kTextMuted)),
+          ),
+        ]),
+        const SizedBox(height: 12),
+        ...tasks.map((t) => KanbanCard(key: ValueKey(t.id), task: t, onMove: onMove, currentUserInitials: currentUserInitials)),
+      ]),
     );
   }
 }
@@ -55,23 +47,19 @@ class KanbanColumn extends StatelessWidget {
 
 class KanbanCard extends StatelessWidget {
   final Task task;
-  const KanbanCard({super.key, required this.task});
+  final void Function(Task, String) onMove;
+  final String currentUserInitials;
+  const KanbanCard({super.key, required this.task, required this.onMove, required this.currentUserInitials});
+
+  // Các trạng thái có thể chuyển đến
+  static const _statusOptions = [
+    ('todo', 'Chờ làm'),
+    ('doing', 'Đang làm'),
+    ('done', 'Hoàn thành'),
+  ];
 
   @override
   Widget build(BuildContext context) {
-    return Draggable<Task>(
-      data: task,
-      feedback: Material(
-        elevation: 6,
-        borderRadius: BorderRadius.circular(10),
-        child: SizedBox(width: 280, child: _card(dragging: true)),
-      ),
-      childWhenDragging: Opacity(opacity: 0.25, child: _card()),
-      child: _card(),
-    );
-  }
-
-  Widget _card({bool dragging = false}) {
     final borderColor = switch (task.status) {
       'doing' => kAmber,
       'done'  => kTeal,
@@ -98,6 +86,19 @@ class KanbanCard extends StatelessWidget {
                         overflow: TextOverflow.ellipsis, maxLines: 2),
                     const SizedBox(height: 8),
                     Row(children: [
+                      if (task.assignee == currentUserInitials)
+                        PopupMenuButton<String>(
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                          iconSize: 18,
+                          icon: const Icon(Icons.swap_horiz, size: 16, color: kTextMuted),
+                          tooltip: 'Chuyển trạng thái',
+                          onSelected: (s) => onMove(task, s),
+                          itemBuilder: (_) => _statusOptions
+                              .where((o) => o.$1 != task.status)
+                              .map((o) => PopupMenuItem(value: o.$1, child: Text(o.$2, style: const TextStyle(fontSize: 13))))
+                              .toList(),
+                        ),
                       const Spacer(),
                       AppAvatar(initials: task.assignee,
                           colorIndex: avatarIndex(task.assignee), size: 20),

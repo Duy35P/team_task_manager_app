@@ -3,7 +3,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../theme.dart';
 import '../widgets/app_top_bar.dart';
 import '../widgets/shared_widgets.dart';
-import '../responsive.dart';
 import '../services/auth_service.dart';
 
 class AccountScreen extends StatefulWidget {
@@ -211,14 +210,13 @@ class _AccountScreenState extends State<AccountScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final mobile = isMobile(context);
     final user = _authService.currentUser;
 
-    if (user != null) return _buildProfilePage(user, mobile);
-    return _buildLoginPage(mobile);
+    if (user != null) return _buildProfilePage(user);
+    return _buildLoginPage();
   }
 
-  Widget _buildProfilePage(User user, bool mobile) {
+  Widget _buildProfilePage(User user) {
     final displayName = user.displayName ?? 'User';
     final email = user.email ?? '';
     final initials = _getInitials(displayName);
@@ -230,7 +228,7 @@ class _AccountScreenState extends State<AccountScreen> {
         padding: const EdgeInsets.all(20),
         child: Center(
           child: ConstrainedBox(
-            constraints: BoxConstraints(maxWidth: mobile ? double.infinity : 400),
+            constraints: const BoxConstraints(maxWidth: double.infinity),
             child: Column(children: [
               AppCard(
                 child: Column(children: [
@@ -316,7 +314,7 @@ class _AccountScreenState extends State<AccountScreen> {
     return parts.first.substring(0, parts.first.length.clamp(0, 2)).toUpperCase();
   }
 
-  Widget _buildLoginPage(bool mobile) {
+  Widget _buildLoginPage() {
     return Scaffold(
       backgroundColor: kAppBg,
       appBar: AppTopBar(title: 'Tài khoản'),
@@ -324,7 +322,7 @@ class _AccountScreenState extends State<AccountScreen> {
         padding: const EdgeInsets.all(20),
         child: Center(
           child: ConstrainedBox(
-            constraints: BoxConstraints(maxWidth: mobile ? double.infinity : 360),
+            constraints: const BoxConstraints(maxWidth: double.infinity),
             child: AppCard(
               child: Column(mainAxisSize: MainAxisSize.min, children: [
                 Container(
