@@ -1,5 +1,8 @@
 # Phân quyền Task theo vai trò (Admin / Thành viên)
-
+## các acc có sẵn:
+ c@gmail.com - mật khẩu:Duy123!
+ d@gmail.com - mật khẩu như trên
+ e@gmail.com - mật khẩu như trên
 ## Mục tiêu
 - **Admin (nhóm trưởng)**: được thêm / sửa / xóa task trên màn hình Task.
 - **Thành viên thường**: chỉ được đổi trạng thái task **được giao cho mình** trên Kanban. Không được chạm vào task của người khác.
